@@ -8,30 +8,27 @@
     "type": "git"
   },
   "homepage": "https://github.com/foambubble/foam",
-  "version": "0.18.4",
+  "version": "0.26.5",
   "license": "MIT",
   "publisher": "foam",
   "engines": {
-    "vscode": "^1.47.1"
+    "vscode": "^1.70.0"
   },
   "icon": "assets/icon/FOAM_ICON_256.png",
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:.vscode/foam.json",
-    "onView:foam-vscode.tags-explorer",
-    "onCommand:foam-vscode.update-wikilinks",
-    "onCommand:foam-vscode.open-daily-note",
-    "onCommand:foam-vscode.open-random-note",
-    "onCommand:foam-vscode.janitor",
-    "onCommand:foam-vscode.copy-without-brackets",
-    "onCommand:foam-vscode.show-graph",
-    "onCommand:foam-vscode.create-new-template",
-    "onCommand:foam-vscode.create-note-from-template",
-    "onCommand:foam-vscode.create-note-from-default-template"
+    "workspaceContains:.vscode/foam.json"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/bundles/extension-node.js",
+  "browser": "./out/bundles/extension-web.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "No expressions are allowed in filters."
+    }
+  },
   "contributes": {
     "markdown.markdownItPlugins": true,
     "markdown.previewStyles": [
@@ -60,28 +57,34 @@
     "views": {
       "explorer": [
         {
-          "id": "foam-vscode.backlinks",
-          "name": "Backlinks",
-          "icon": "media/dep.svg",
-          "contextualTitle": "Backlinks"
+          "id": "foam-vscode.connections",
+          "name": "Connections",
+          "icon": "$(references)",
+          "contextualTitle": "Foam"
         },
         {
           "id": "foam-vscode.tags-explorer",
           "name": "Tag Explorer",
-          "icon": "media/dep.svg",
-          "contextualTitle": "Tags Explorer"
+          "icon": "$(tag)",
+          "contextualTitle": "Foam"
+        },
+        {
+          "id": "foam-vscode.notes-explorer",
+          "name": "Notes",
+          "icon": "$(notebook)",
+          "contextualTitle": "Foam"
         },
         {
           "id": "foam-vscode.orphans",
           "name": "Orphans",
-          "icon": "media/dep.svg",
-          "contextualTitle": "Orphans"
+          "icon": "$(debug-gripper)",
+          "contextualTitle": "Foam"
         },
         {
           "id": "foam-vscode.placeholders",
           "name": "Placeholders",
-          "icon": "media/dep.svg",
-          "contextualTitle": "Placeholders"
+          "icon": "$(debug-disconnect)",
+          "contextualTitle": "Foam"
         }
       ]
     },
@@ -91,8 +94,8 @@
         "contents": "No tags found. Notes that contain tags will show up here. You may add tags to a note with a hashtag (#tag) or by adding a tag list to the front matter (tags: tag1, tag2)."
       },
       {
-        "view": "foam-vscode.backlinks",
-        "contents": "No backlinks found for selected resource."
+        "view": "foam-vscode.connections",
+        "contents": "Nothing found for the selected resource and the current filter."
       },
       {
         "view": "foam-vscode.orphans",
@@ -100,47 +103,181 @@
       },
       {
         "view": "foam-vscode.placeholders",
-        "contents": "No placeholders found. Pending links and notes without content will show up here."
+        "contents": "No placeholders found for selected resource or workspace."
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "foam-vscode.group-orphans-by-folder",
-          "when": "view == foam-vscode.orphans && foam-vscode.orphans-grouped-by-folder == false",
+          "command": "foam-vscode.views.connections.show:backlinks",
+          "when": "view == foam-vscode.connections && foam-vscode.views.connections.show == 'all links'",
           "group": "navigation"
         },
         {
-          "command": "foam-vscode.group-orphans-off",
-          "when": "view == foam-vscode.orphans && foam-vscode.orphans-grouped-by-folder == true",
+          "command": "foam-vscode.views.connections.show:forward-links",
+          "when": "view == foam-vscode.connections && foam-vscode.views.connections.show == 'backlinks'",
           "group": "navigation"
         },
         {
-          "command": "foam-vscode.group-placeholders-by-folder",
-          "when": "view == foam-vscode.placeholders && foam-vscode.placeholders-grouped-by-folder == false",
+          "command": "foam-vscode.views.connections.show:all-links",
+          "when": "view == foam-vscode.connections && foam-vscode.views.connections.show == 'forward links'",
           "group": "navigation"
         },
         {
-          "command": "foam-vscode.group-placeholders-off",
-          "when": "view == foam-vscode.placeholders && foam-vscode.placeholders-grouped-by-folder == true",
+          "command": "foam-vscode.views.orphans.group-by:folder",
+          "when": "view == foam-vscode.orphans && foam-vscode.views.orphans.group-by == 'off'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.orphans.group-by:off",
+          "when": "view == foam-vscode.orphans && foam-vscode.views.orphans.group-by == 'folder'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.show:for-current-file",
+          "when": "view == foam-vscode.tags-explorer && foam-vscode.views.tags-explorer.show == 'all'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.show:all",
+          "when": "view == foam-vscode.tags-explorer && foam-vscode.views.tags-explorer.show == 'for-current-file'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.group-by:folder",
+          "when": "view == foam-vscode.tags-explorer && foam-vscode.views.tags-explorer.group-by == 'off'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.group-by:off",
+          "when": "view == foam-vscode.tags-explorer && foam-vscode.views.tags-explorer.group-by == 'folder'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.expand-all",
+          "when": "view == foam-vscode.tags-explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.show:for-current-file",
+          "when": "view == foam-vscode.placeholders && foam-vscode.views.placeholders.show == 'all'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.show:all",
+          "when": "view == foam-vscode.placeholders && foam-vscode.views.placeholders.show == 'for-current-file'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.group-by:folder",
+          "when": "view == foam-vscode.placeholders && foam-vscode.views.placeholders.group-by == 'off'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.group-by:off",
+          "when": "view == foam-vscode.placeholders && foam-vscode.views.placeholders.group-by == 'folder'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.expand-all",
+          "when": "view == foam-vscode.placeholders",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.show:notes",
+          "when": "view == foam-vscode.notes-explorer && foam-vscode.views.notes-explorer.show == 'all'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.show:all",
+          "when": "view == foam-vscode.notes-explorer && foam-vscode.views.notes-explorer.show == 'notes-only'",
+          "group": "navigation"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.expand-all",
+          "when": "view == foam-vscode.notes-explorer",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
-          "command": "foam-vscode.group-orphans-by-folder",
+          "command": "foam-vscode.create-note-from-default-template",
           "when": "false"
         },
         {
-          "command": "foam-vscode.group-orphans-off",
+          "command": "foam-vscode.update-graph",
           "when": "false"
         },
         {
-          "command": "foam-vscode.group-placeholders-by-folder",
+          "command": "foam-vscode.views.connections.show:all-links",
           "when": "false"
         },
         {
-          "command": "foam-vscode.group-placeholders-off",
+          "command": "foam-vscode.views.connections.show:backlinks",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.connections.show:forward-links",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.orphans.group-by:folder",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.orphans.group-by:off",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.show:for-current-file",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.show:all",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.group-by:folder",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.group-by:off",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.tags-explorer.expand-all",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.show:for-current-file",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.show:all",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.group-by:folder",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.group-by:off",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.placeholders.expand-all",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.show:all",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.show:notes",
+          "when": "false"
+        },
+        {
+          "command": "foam-vscode.views.notes-explorer.expand-all",
           "when": "false"
         },
         {
@@ -155,19 +292,35 @@
     },
     "commands": [
       {
+        "command": "foam-vscode.create-note",
+        "title": "Foam: Create New Note"
+      },
+      {
+        "command": "foam-vscode.clear-cache",
+        "title": "Foam: Clear Cache"
+      },
+      {
+        "command": "foam-vscode.update-graph",
+        "title": "Foam: Update Graph"
+      },
+      {
         "command": "foam-vscode.set-log-level",
-        "title": "Foam: Set log level"
+        "title": "Foam: Set Log Level"
       },
       {
         "command": "foam-vscode.show-graph",
-        "title": "Foam: Show graph"
+        "title": "Foam: Show Graph"
       },
       {
-        "command": "foam-vscode.update-wikilinks",
-        "title": "Foam: Update Markdown Reference List"
+        "command": "foam-vscode.update-wikilink-definitions",
+        "title": "Foam: Update Wikilink Definitions"
       },
       {
         "command": "foam-vscode.open-daily-note",
+        "title": "Foam: Open Today's Note"
+      },
+      {
+        "command": "foam-vscode.open-daily-note-for-date",
         "title": "Foam: Open Daily Note"
       },
       {
@@ -195,24 +348,102 @@
         "title": "Foam: Open Resource"
       },
       {
-        "command": "foam-vscode.group-orphans-by-folder",
-        "title": "Foam: Group Orphans By Folder",
+        "command": "foam-vscode.convert-link-style-inplace",
+        "title": "Foam: Convert Link Style in Place"
+      },
+      {
+        "command": "foam-vscode.convert-link-style-incopy",
+        "title": "Foam: Convert Link Format in Copy"
+      },
+      {
+        "command": "foam-vscode.views.orphans.group-by:folder",
+        "title": "Group By Folder",
         "icon": "$(list-tree)"
       },
       {
-        "command": "foam-vscode.group-orphans-off",
-        "title": "Foam: Don't Group Orphans",
+        "command": "foam-vscode.views.connections.show:backlinks",
+        "title": "Show Backlinks",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "foam-vscode.views.connections.show:forward-links",
+        "title": "Show Links",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "foam-vscode.views.connections.show:all-links",
+        "title": "Show All",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "foam-vscode.views.orphans.group-by:off",
+        "title": "Flat list",
         "icon": "$(list-flat)"
       },
       {
-        "command": "foam-vscode.group-placeholders-by-folder",
-        "title": "Foam: Group Placeholders By Folder",
+        "command": "foam-vscode.views.tags-explorer.show:for-current-file",
+        "title": "Show tags in current file",
+        "icon": "$(file)"
+      },
+      {
+        "command": "foam-vscode.views.tags-explorer.show:all",
+        "title": "Show tags in workspace",
+        "icon": "$(files)"
+      },
+      {
+        "command": "foam-vscode.views.tags-explorer.group-by:folder",
+        "title": "Group By Folder",
         "icon": "$(list-tree)"
       },
       {
-        "command": "foam-vscode.group-placeholders-off",
-        "title": "Foam: Don't Group Placeholders",
+        "command": "foam-vscode.views.tags-explorer.group-by:off",
+        "title": "Flat list",
         "icon": "$(list-flat)"
+      },
+      {
+        "command": "foam-vscode.views.tags-explorer.expand-all",
+        "title": "Expand all",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "foam-vscode.views.placeholders.show:for-current-file",
+        "title": "Show placeholders in current file",
+        "icon": "$(file)"
+      },
+      {
+        "command": "foam-vscode.views.placeholders.show:all",
+        "title": "Show placeholders in workspace",
+        "icon": "$(files)"
+      },
+      {
+        "command": "foam-vscode.views.placeholders.group-by:folder",
+        "title": "Group By Folder",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "foam-vscode.views.placeholders.group-by:off",
+        "title": "Flat list",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "foam-vscode.views.placeholders.expand-all",
+        "title": "Expand all",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "foam-vscode.views.notes-explorer.show:all",
+        "title": "Show all resources",
+        "icon": "$(files)"
+      },
+      {
+        "command": "foam-vscode.views.notes-explorer.expand-all",
+        "title": "Expand all",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "foam-vscode.views.notes-explorer.show:notes",
+        "title": "Show only notes",
+        "icon": "$(file)"
       },
       {
         "command": "foam-vscode.create-new-template",
@@ -226,6 +457,41 @@
     "configuration": {
       "title": "Foam",
       "properties": {
+        "foam.supportedLanguages": {
+          "type": "array",
+          "default": [
+            "markdown"
+          ],
+          "description": "List of languages to treat as Markdown-like documents."
+        },
+        "foam.completion.label": {
+          "type": "string",
+          "default": "path",
+          "description": "Describes what note property to use as a label for completion items",
+          "enum": [
+            "path",
+            "title",
+            "identifier"
+          ],
+          "enumDescriptions": [
+            "Use the path of the note",
+            "Use the title of the note",
+            "Use the identifier of the note"
+          ]
+        },
+        "foam.completion.useAlias": {
+          "type": "string",
+          "default": "never",
+          "description": "Specifies in which cases to use an alias when creating a wikilink",
+          "enum": [
+            "never",
+            "whenPathDiffersFromTitle"
+          ],
+          "enumDescriptions": [
+            "Never use aliases in completion items",
+            "Use alias if resource path is different from title"
+          ]
+        },
         "foam.files.ignore": {
           "type": [
             "array"
@@ -237,6 +503,34 @@
             "**/node_modules/**/*"
           ],
           "description": "Specifies the list of globs that will be ignored by Foam (e.g. they will not be considered when creating the graph). To ignore the all the content of a given folder, use `<folderName>/**/*`"
+        },
+        "foam.files.attachmentExtensions": {
+          "type": "string",
+          "default": "pdf mp3 webm wav m4a mp4 avi mov rtf txt doc docx pages xls xlsx numbers ppt pptm pptx",
+          "description": "Space separated list of file extensions that will be considered attachments"
+        },
+        "foam.files.notesExtensions": {
+          "type": "string",
+          "default": "",
+          "description": "Space separated list of extra file extensions that will be considered text notes (e.g. 'mdx txt markdown')"
+        },
+        "foam.files.defaultNoteExtension": {
+          "type": "string",
+          "default": "md",
+          "description": "The default extension for new notes"
+        },
+        "foam.files.newNotePath": {
+          "type": "string",
+          "default": "root",
+          "description": "Specifies where to create a new note. It is overruled by the template or command arguments",
+          "enum": [
+            "root",
+            "currentDir"
+          ],
+          "enumDescriptions": [
+            "Use the root of the workspace",
+            "Use the directory of the file in the current editor"
+          ]
         },
         "foam.logging.level": {
           "type": "string",
@@ -309,42 +603,12 @@
           "default": [],
           "markdownDescription": "Specifies the list of glob patterns that will be excluded from the orphans report. To ignore the all the content of a given folder, use `**<folderName>/**/*`"
         },
-        "foam.orphans.groupBy": {
-          "type": [
-            "string"
-          ],
-          "enum": [
-            "off",
-            "folder"
-          ],
-          "enumDescriptions": [
-            "Disable grouping",
-            "Group by folder"
-          ],
-          "default": "folder",
-          "markdownDescription": "Group orphans report entries by."
-        },
         "foam.placeholders.exclude": {
           "type": [
             "array"
           ],
           "default": [],
           "markdownDescription": "Specifies the list of glob patterns that will be excluded from the placeholders report. To ignore the all the content of a given folder, use `**<folderName>/**/*`"
-        },
-        "foam.placeholders.groupBy": {
-          "type": [
-            "string"
-          ],
-          "enum": [
-            "off",
-            "folder"
-          ],
-          "enumDescriptions": [
-            "Disable grouping",
-            "Group by folder"
-          ],
-          "default": "folder",
-          "markdownDescription": "Group blank note report entries by."
         },
         "foam.dateSnippets.afterCompletion": {
           "type": "string",
@@ -360,6 +624,22 @@
             "Navigates to the note, creating it following your daily note settings if it does not exist"
           ],
           "description": "Whether or not to navigate to the target daily note when a daily note snippet is selected."
+        },
+        "foam.preview.embedNoteType": {
+          "type": "string",
+          "default": "full-card",
+          "enum": [
+            "full-inline",
+            "full-card",
+            "content-inline",
+            "content-card"
+          ],
+          "enumDescriptions": [
+            "Include the section with title and style inline",
+            "Include the section with title and style it within a container",
+            "Include the section without title and style inline",
+            "Include the section without title and style it within a container"
+          ]
         },
         "foam.graph.titleMaxLength": {
           "type": "number",
@@ -377,76 +657,91 @@
       {
         "command": "foam-vscode.open-daily-note",
         "key": "alt+d"
+      },
+      {
+        "command": "foam-vscode.open-daily-note-for-date",
+        "key": "alt+h"
       }
     ]
   },
   "scripts": {
-    "build": "tsc -p ./",
-    "pretest": "yarn build",
-    "test": "node ./out/test/run-tests.js",
-    "pretest:unit": "yarn build",
-    "test:unit": "node ./out/test/run-tests.js --unit",
-    "pretest:e2e": "yarn build",
-    "test:e2e": "node ./out/test/run-tests.js --e2e",
-    "lint": "tsdx lint src",
+    "build:node": "node esbuild.js --platform=node",
+    "build:web": "node esbuild.js --platform=web",
+    "build": "yarn build:node && yarn build:web",
+    "vscode:prepublish": "yarn clean && yarn build:node --production && yarn build:web --production",
+    "compile": "tsc -p ./",
+    "test-reset-workspace": "rm -rf .test-workspace && mkdir .test-workspace && touch .test-workspace/.keep",
+    "test-setup": "yarn compile && yarn build && yarn test-reset-workspace",
+    "test": "yarn test-setup && node ./out/test/run-tests.js",
+    "test:unit": "yarn test-setup && node ./out/test/run-tests.js --unit",
+    "test:e2e": "yarn test-setup && node ./out/test/run-tests.js --e2e",
+    "lint": "dts lint src",
     "clean": "rimraf out",
-    "watch": "tsc --build ./tsconfig.json --watch",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'yarn build' --ext ts",
     "vscode:start-debugging": "yarn clean && yarn watch",
-    "vscode:prepublish": "yarn npm-install && yarn run build",
-    "npm-install": "rimraf node_modules && npm i",
-    "npm-cleanup": "rimraf package-lock.json node_modules && yarn",
-    "package-extension": "npx vsce package && yarn npm-cleanup",
+    "package-extension": "npx vsce package --yarn",
     "install-extension": "code --install-extension ./foam-vscode-$npm_package_version.vsix",
+    "open-in-browser": "vscode-test-web --quality=stable --browser=chromium --extensionDevelopmentPath=. ",
     "publish-extension-openvsx": "npx ovsx publish foam-vscode-$npm_package_version.vsix -p $OPENVSX_TOKEN",
     "publish-extension-vscode": "npx vsce publish --packagePath foam-vscode-$npm_package_version.vsix",
-    "publish-extension": "yarn publish-extension-vscode && yarn publish-extension-openvsx && yarn npm-cleanup"
+    "publish-extension": "yarn publish-extension-vscode && yarn publish-extension-openvsx"
   },
   "devDependencies": {
     "@types/dateformat": "^3.0.1",
-    "@types/glob": "^7.1.1",
+    "@types/jest": "^29.5.3",
     "@types/lodash": "^4.14.157",
     "@types/markdown-it": "^12.0.1",
     "@types/micromatch": "^4.0.1",
     "@types/node": "^13.11.0",
     "@types/picomatch": "^2.2.1",
     "@types/remove-markdown": "^0.1.1",
-    "@types/vscode": "^1.47.1",
-    "@typescript-eslint/eslint-plugin": "^2.30.0",
-    "@typescript-eslint/parser": "^2.30.0",
-    "eslint": "^6.8.0",
-    "eslint-import-resolver-typescript": "^2.5.0",
-    "eslint-plugin-import": "^2.24.2",
-    "eslint-plugin-jest": "^25.3.0",
+    "@types/vscode": "^1.70.0",
+    "@typescript-eslint/eslint-plugin": "^5.51.0",
+    "@typescript-eslint/parser": "^5.51.0",
+    "@vscode/test-web": "^0.0.62",
+    "dts-cli": "^1.6.3",
+    "esbuild": "^0.17.7",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
+    "eslint": "^8.33.0",
+    "eslint-import-resolver-typescript": "^3.5.3",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-jest": "^27.2.1",
     "husky": "^4.2.5",
-    "jest": "^26.2.2",
-    "jest-extended": "^0.11.5",
+    "jest": "^29.6.2",
+    "jest-extended": "^3.2.3",
     "markdown-it": "^12.0.4",
+    "micromatch": "^4.0.2",
+    "nodemon": "^3.1.7",
     "rimraf": "^3.0.2",
-    "ts-jest": "^26.4.4",
-    "tsdx": "^0.13.2",
+    "ts-jest": "^29.1.1",
     "tslib": "^2.0.0",
-    "typescript": "^3.9.5",
+    "typescript": "^4.9.5",
     "vscode-test": "^1.3.0",
     "wait-for-expect": "^3.0.2"
   },
   "dependencies": {
-    "dateformat": "^3.0.3",
+    "dateformat": "4.5.1",
     "detect-newline": "^3.1.0",
-    "fast-array-diff": "^1.0.1",
     "github-slugger": "^1.4.0",
-    "glob": "^7.1.6",
     "gray-matter": "^4.0.2",
+    "js-sha1": "^0.7.0",
     "lodash": "^4.17.21",
+    "lru-cache": "^7.14.1",
     "markdown-it-regex": "^0.2.0",
-    "micromatch": "^4.0.2",
+    "mnemonist": "^0.39.8",
+    "path-browserify": "^1.0.1",
     "remark-frontmatter": "^2.0.0",
     "remark-parse": "^8.0.2",
     "remark-wiki-link": "^0.0.4",
-    "remove-markdown": "^0.3.0",
-    "replace-ext": "^2.0.0",
     "title-case": "^3.0.2",
     "unified": "^9.0.0",
     "unist-util-visit": "^2.0.2",
-    "yaml": "^1.10.0"
+    "yaml": "^2.2.2"
+  },
+  "__metadata": {
+    "id": "b85c6625-454b-4b61-8a22-c42f3d0f2e1e",
+    "publisherDisplayName": "Foam",
+    "publisherId": "34339645-24f0-4619-9917-12157fd92446",
+    "isPreReleaseVersion": false
   }
 }

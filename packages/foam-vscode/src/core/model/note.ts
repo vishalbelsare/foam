@@ -1,18 +1,11 @@
 import { URI } from './uri';
-import { Position } from './position';
 import { Range } from './range';
-
-export interface NoteSource {
-  text: string;
-  contentStart: Position;
-  end: Position;
-  eol: string;
-}
 
 export interface ResourceLink {
   type: 'wikilink' | 'link';
   rawText: string;
   range: Range;
+  isEmbed: boolean;
 }
 
 export interface NoteLinkDefinition {
@@ -22,8 +15,26 @@ export interface NoteLinkDefinition {
   range?: Range;
 }
 
+export abstract class NoteLinkDefinition {
+  static format(definition: NoteLinkDefinition) {
+    const url =
+      definition.url.indexOf(' ') > 0 ? `<${definition.url}>` : definition.url;
+    let text = `[${definition.label}]: ${url}`;
+    if (definition.title) {
+      text = `${text} "${definition.title}"`;
+    }
+
+    return text;
+  }
+}
+
 export interface Tag {
   label: string;
+  range: Range;
+}
+
+export interface Alias {
+  title: string;
   range: Range;
 }
 
@@ -39,11 +50,11 @@ export interface Resource {
   properties: any;
   sections: Section[];
   tags: Tag[];
+  aliases: Alias[];
   links: ResourceLink[];
 
   // TODO to remove
   definitions: NoteLinkDefinition[];
-  source: NoteSource;
 }
 
 export interface ResourceParser {
@@ -53,6 +64,10 @@ export interface ResourceParser {
 export abstract class Resource {
   public static sortByTitle(a: Resource, b: Resource) {
     return a.title.localeCompare(b.title);
+  }
+
+  public static sortByPath(a: Resource, b: Resource) {
+    return a.uri.path.localeCompare(b.uri.path);
   }
 
   public static isResource(thing: any): thing is Resource {
@@ -65,6 +80,7 @@ export abstract class Resource {
       typeof (thing as Resource).type === 'string' &&
       typeof (thing as Resource).properties === 'object' &&
       typeof (thing as Resource).tags === 'object' &&
+      typeof (thing as Resource).aliases === 'object' &&
       typeof (thing as Resource).links === 'object'
     );
   }

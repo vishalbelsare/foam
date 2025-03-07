@@ -5,14 +5,13 @@ import { Resource, ResourceParser } from '../core/model/note';
 import { Range } from '../core/model/range';
 import { FoamWorkspace } from '../core/model/workspace';
 import { MarkdownLink } from '../core/services/markdown-link';
-import { FoamFeature } from '../types';
-import { isNone } from '../utils';
 import {
   fromVsCodeUri,
   toVsCodePosition,
   toVsCodeRange,
   toVsCodeUri,
 } from '../utils/vsc-utils';
+import { isNone } from '../core/utils';
 
 const AMBIGUOUS_IDENTIFIER_CODE = 'ambiguous-identifier';
 const UNKNOWN_SECTION_CODE = 'unknown-section';
@@ -25,20 +24,21 @@ interface FoamCommand<T> {
 interface FindIdentifierCommandArgs {
   range: vscode.Range;
   target: vscode.Uri;
+  defaultExtension: string;
   amongst: vscode.Uri[];
 }
 
-const FIND_IDENTIFER_COMMAND: FoamCommand<FindIdentifierCommandArgs> = {
+const FIND_IDENTIFIER_COMMAND: FoamCommand<FindIdentifierCommandArgs> = {
   name: 'foam:compute-identifier',
-  execute: async ({ target, amongst, range }) => {
+  execute: async ({ target, amongst, range, defaultExtension }) => {
     if (vscode.window.activeTextEditor) {
       let identifier = FoamWorkspace.getShortestIdentifier(
         target.path,
         amongst.map(uri => uri.path)
       );
 
-      identifier = identifier.endsWith('.md')
-        ? identifier.slice(0, -3)
+      identifier = identifier.endsWith(defaultExtension)
+        ? identifier.slice(0, defaultExtension.length * -1)
         : identifier;
 
       await vscode.window.activeTextEditor.edit(builder => {
@@ -62,59 +62,57 @@ const REPLACE_TEXT_COMMAND: FoamCommand<ReplaceTextCommandArgs> = {
   },
 };
 
-const feature: FoamFeature = {
-  activate: async (
-    context: vscode.ExtensionContext,
-    foamPromise: Promise<Foam>
-  ) => {
-    const collection = vscode.languages.createDiagnosticCollection('foam');
-    const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 500);
-    const foam = await foamPromise;
-    if (vscode.window.activeTextEditor) {
-      updateDiagnostics(
-        foam.workspace,
-        foam.services.parser,
-        vscode.window.activeTextEditor.document,
-        collection
-      );
-    }
-    context.subscriptions.push(
-      vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (editor) {
-          updateDiagnostics(
-            foam.workspace,
-            foam.services.parser,
-            editor.document,
-            collection
-          );
-        }
-      }),
-      vscode.workspace.onDidChangeTextDocument(event => {
-        debouncedUpdateDiagnostics(
+export default async function activate(
+  context: vscode.ExtensionContext,
+  foamPromise: Promise<Foam>
+) {
+  const collection = vscode.languages.createDiagnosticCollection('foam');
+  const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 500);
+  const foam = await foamPromise;
+  if (vscode.window.activeTextEditor) {
+    updateDiagnostics(
+      foam.workspace,
+      foam.services.parser,
+      vscode.window.activeTextEditor.document,
+      collection
+    );
+  }
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      if (editor) {
+        updateDiagnostics(
           foam.workspace,
           foam.services.parser,
-          event.document,
+          editor.document,
           collection
         );
-      }),
-      vscode.languages.registerCodeActionsProvider(
-        'markdown',
-        new IdentifierResolver(),
-        {
-          providedCodeActionKinds: IdentifierResolver.providedCodeActionKinds,
-        }
-      ),
-      vscode.commands.registerCommand(
-        FIND_IDENTIFER_COMMAND.name,
-        FIND_IDENTIFER_COMMAND.execute
-      ),
-      vscode.commands.registerCommand(
-        REPLACE_TEXT_COMMAND.name,
-        REPLACE_TEXT_COMMAND.execute
-      )
-    );
-  },
-};
+      }
+    }),
+    vscode.workspace.onDidChangeTextDocument(event => {
+      debouncedUpdateDiagnostics(
+        foam.workspace,
+        foam.services.parser,
+        event.document,
+        collection
+      );
+    }),
+    vscode.languages.registerCodeActionsProvider(
+      'markdown',
+      new IdentifierResolver(foam.workspace.defaultExtension),
+      {
+        providedCodeActionKinds: IdentifierResolver.providedCodeActionKinds,
+      }
+    ),
+    vscode.commands.registerCommand(
+      FIND_IDENTIFIER_COMMAND.name,
+      FIND_IDENTIFIER_COMMAND.execute
+    ),
+    vscode.commands.registerCommand(
+      REPLACE_TEXT_COMMAND.name,
+      REPLACE_TEXT_COMMAND.execute
+    )
+  );
+}
 
 export function updateDiagnostics(
   workspace: FoamWorkspace,
@@ -196,6 +194,8 @@ export class IdentifierResolver implements vscode.CodeActionProvider {
     vscode.CodeActionKind.QuickFix,
   ];
 
+  constructor(private defaultExtension: string) {}
+
   provideCodeActions(
     document: vscode.TextDocument,
     range: vscode.Range | vscode.Selection,
@@ -210,7 +210,12 @@ export class IdentifierResolver implements vscode.CodeActionProvider {
         );
         for (const item of diagnostic.relatedInformation) {
           res.push(
-            createFindIdentifierCommand(diagnostic, item.location.uri, uris)
+            createFindIdentifierCommand(
+              diagnostic,
+              item.location.uri,
+              this.defaultExtension,
+              uris
+            )
           );
         }
         return [...acc, ...res];
@@ -235,12 +240,12 @@ const createReplaceSectionCommand = (
   section: string
 ): vscode.CodeAction => {
   const action = new vscode.CodeAction(
-    `Use ${section}`,
+    `${section}`,
     vscode.CodeActionKind.QuickFix
   );
   action.command = {
     command: REPLACE_TEXT_COMMAND.name,
-    title: `Use section ${section}`,
+    title: `Use section "${section}"`,
     arguments: [
       {
         value: section,
@@ -260,19 +265,21 @@ const createReplaceSectionCommand = (
 const createFindIdentifierCommand = (
   diagnostic: vscode.Diagnostic,
   target: vscode.Uri,
+  defaultExtension: string,
   possibleTargets: vscode.Uri[]
 ): vscode.CodeAction => {
   const action = new vscode.CodeAction(
-    `Use ${vscode.workspace.asRelativePath(target)}`,
+    `${vscode.workspace.asRelativePath(target)}`,
     vscode.CodeActionKind.QuickFix
   );
   action.command = {
-    command: FIND_IDENTIFER_COMMAND.name,
+    command: FIND_IDENTIFIER_COMMAND.name,
     title: 'Link to this resource',
     arguments: [
       {
         target: target,
         amongst: possibleTargets,
+        defaultExtension: defaultExtension,
         range: new vscode.Range(
           diagnostic.range.start.line,
           diagnostic.range.start.character + 2,
@@ -285,5 +292,3 @@ const createFindIdentifierCommand = (
   action.diagnostics = [diagnostic];
   return action;
 };
-
-export default feature;

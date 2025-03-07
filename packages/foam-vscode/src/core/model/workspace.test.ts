@@ -87,6 +87,13 @@ describe('Workspace resources', () => {
     const res = ws.find('test-file#my-section');
     expect(res.uri.fragment).toEqual('my-section');
   });
+
+  it('should find absolute files even when no basedir is provided', () => {
+    const noteA = createTestNote({ uri: '/a/path/to/file.md' });
+    const ws = createTestWorkspace().set(noteA);
+
+    expect(ws.find('/a/path/to/file.md').uri.path).toEqual(noteA.uri.path);
+  });
 });
 
 describe('Identifier computation', () => {
@@ -100,10 +107,7 @@ describe('Identifier computation', () => {
     const third = createTestNote({
       uri: '/another/path/for/page-a.md',
     });
-    const ws = new FoamWorkspace()
-      .set(first)
-      .set(second)
-      .set(third);
+    const ws = new FoamWorkspace('.md').set(first).set(second).set(third);
 
     expect(ws.getIdentifier(first.uri)).toEqual('to/page-a');
     expect(ws.getIdentifier(second.uri)).toEqual('way/for/page-a');
@@ -120,14 +124,11 @@ describe('Identifier computation', () => {
     const third = createTestNote({
       uri: '/another/path/for/page-a.md',
     });
-    const ws = new FoamWorkspace()
-      .set(first)
-      .set(second)
-      .set(third);
+    const ws = new FoamWorkspace('.md').set(first).set(second).set(third);
 
-    expect(ws.getIdentifier(first.uri.withFragment('section name'))).toEqual(
-      'to/page-a#section name'
-    );
+    expect(
+      ws.getIdentifier(first.uri.with({ fragment: 'section name' }))
+    ).toEqual('to/page-a#section name');
   });
 
   const needle = '/project/car/todo';
@@ -169,18 +170,14 @@ describe('Identifier computation', () => {
   });
 
   it('should ignore elements from the exclude list', () => {
-    const workspace = new FoamWorkspace();
+    const workspace = new FoamWorkspace('.md');
     const noteA = createTestNote({ uri: '/path/to/note-a.md' });
     const noteB = createTestNote({ uri: '/path/to/note-b.md' });
     const noteC = createTestNote({ uri: '/path/to/note-c.md' });
     const noteD = createTestNote({ uri: '/path/to/note-d.md' });
     const noteABis = createTestNote({ uri: '/path/to/another/note-a.md' });
 
-    workspace
-      .set(noteA)
-      .set(noteB)
-      .set(noteC)
-      .set(noteD);
+    workspace.set(noteA).set(noteB).set(noteC).set(noteD);
     expect(workspace.getIdentifier(noteABis.uri)).toEqual('another/note-a');
     expect(
       workspace.getIdentifier(noteABis.uri, [noteB.uri, noteA.uri])

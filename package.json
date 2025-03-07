@@ -9,22 +9,23 @@
     "packages/*"
   ],
   "scripts": {
-    "vscode:package-extension": "yarn workspace foam-vscode package-extension",
-    "vscode:install-extension": "yarn workspace foam-vscode install-extension",
-    "vscode:publish-extension": "yarn workspace foam-vscode publish-extension",
+    "version-extension": "lerna version",
+    "package-extension": "yarn workspace foam-vscode package-extension",
+    "install-extension": "yarn workspace foam-vscode install-extension",
+    "publish-extension": "yarn workspace foam-vscode publish-extension",
     "reset": "yarn && yarn clean && yarn build",
     "clean": "lerna run clean",
     "build": "lerna run build",
-    "test": "lerna run test",
+    "test": "yarn workspace foam-vscode test --stream",
     "lint": "lerna run lint",
     "watch": "lerna run watch --concurrency 20 --stream"
   },
   "devDependencies": {
     "all-contributors-cli": "^6.16.1",
-    "lerna": "^3.22.1"
+    "lerna": "^6.4.1"
   },
   "engines": {
-    "node": ">=12"
+    "node": ">=18"
   },
   "husky": {
     "hooks": {
@@ -32,6 +33,7 @@
     }
   },
   "prettier": {
+    "arrowParens": "avoid",
     "printWidth": 80,
     "semi": true,
     "singleQuote": true,

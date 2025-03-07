@@ -3,25 +3,26 @@ import { createMarkdownParser } from '../core/services/markdown-parser';
 import { MarkdownResourceProvider } from '../core/services/markdown-provider';
 import { FoamGraph } from '../core/model/graph';
 import { FoamWorkspace } from '../core/model/workspace';
-import { FileDataStore, Matcher } from '../core/services/datastore';
 import {
   cleanWorkspace,
   closeEditors,
   createFile,
   showInEditor,
 } from '../test/test-utils-vscode';
-import { fromVsCodeUri, toVsCodeUri } from '../utils/vsc-utils';
+import { toVsCodeUri } from '../utils/vsc-utils';
 import { HoverProvider } from './hover-provider';
 import { readFileFromFs } from '../test/test-utils';
+import { FileDataStore } from '../test/test-datastore';
 
 // We can't use createTestWorkspace from /packages/foam-vscode/src/test/test-utils.ts
 // because we need a MarkdownResourceProvider with a real instance of FileDataStore.
 const createWorkspace = () => {
-  const matcher = new Matcher(
-    vscode.workspace.workspaceFolders.map(f => fromVsCodeUri(f.uri))
+  const dataStore = new FileDataStore(
+    readFileFromFs,
+    vscode.workspace.workspaceFolders[0].uri.fsPath
   );
-  const dataStore = new FileDataStore(readFileFromFs);
-  const resourceProvider = new MarkdownResourceProvider(matcher, dataStore);
+  const parser = createMarkdownParser();
+  const resourceProvider = new MarkdownResourceProvider(dataStore, parser);
   const workspace = new FoamWorkspace();
   workspace.registerProvider(resourceProvider);
   return workspace;
@@ -91,9 +92,7 @@ describe('Hover provider', () => {
       );
       const noteA = parser.parse(fileA.uri, fileA.content);
       const noteB = parser.parse(fileB.uri, fileB.content);
-      const ws = createWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createWorkspace().set(noteA).set(noteB);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
@@ -132,9 +131,7 @@ describe('Hover provider', () => {
       const noteA = parser.parse(fileA.uri, fileA.content);
       const noteB = parser.parse(fileB.uri, fileB.content);
 
-      const ws = createWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createWorkspace().set(noteA).set(noteB);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const { doc } = await showInEditor(noteA.uri);
@@ -163,9 +160,7 @@ describe('Hover provider', () => {
       const noteA = parser.parse(fileA.uri, fileA.content);
       const noteB = parser.parse(fileB.uri, fileB.content);
 
-      const ws = createWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createWorkspace().set(noteA).set(noteB);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const { doc } = await showInEditor(noteA.uri);
@@ -174,7 +169,7 @@ describe('Hover provider', () => {
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(getValue(result.contents[0])).toEqual(
         `This is some content from file B`
       );
@@ -189,9 +184,7 @@ describe('Hover provider', () => {
       );
       const noteA = parser.parse(fileA.uri, fileA.content);
       const noteB = parser.parse(fileB.uri, fileB.content);
-      const ws = createWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createWorkspace().set(noteA).set(noteB);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const { doc } = await showInEditor(noteA.uri);
@@ -200,7 +193,7 @@ describe('Hover provider', () => {
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(getValue(result.contents[0])).toEqual(
         `This is some content from file B`
       );
@@ -219,9 +212,7 @@ The content of file B`);
       );
       const noteA = parser.parse(fileA.uri, fileA.content);
       const noteB = parser.parse(fileB.uri, fileB.content);
-      const ws = createWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createWorkspace().set(noteA).set(noteB);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const { doc } = await showInEditor(noteA.uri);
@@ -230,7 +221,7 @@ The content of file B`);
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(getValue(result.contents[0])).toEqual(`The content of file B`);
       ws.dispose();
       graph.dispose();
@@ -250,9 +241,12 @@ The content of file B`);
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(result.contents[0]).toEqual(null);
       expect(result.contents[1]).toEqual(null);
+      expect(getValue(result.contents[2])).toMatch(
+        "[Create note from template for 'wikilink'](command:foam-vscode.create-note?"
+      );
       ws.dispose();
       graph.dispose();
     });
@@ -276,11 +270,12 @@ The content of file B`);
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(getValue(result.contents[0])).toEqual(`This is some content`);
       expect(getValue(result.contents[1])).toMatch(
         /^Also referenced in 1 note:/
       );
+      expect(result.contents[2]).toEqual(null);
       ws.dispose();
       graph.dispose();
     });
@@ -304,7 +299,7 @@ The content of file B`);
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(getValue(result.contents[1])).toMatch(
         /^Also referenced in 1 note:/
       );
@@ -328,12 +323,14 @@ The content of file B`);
       const provider = new HoverProvider(hoverEnabled, ws, graph, parser);
       const result = await provider.provideHover(doc, pos, noCancelToken);
 
-      expect(result.contents).toHaveLength(2);
+      expect(result.contents).toHaveLength(3);
       expect(result.contents[0]).toEqual(null);
       expect(getValue(result.contents[1])).toMatch(
         /^Also referenced in 2 notes:/
       );
-
+      expect(getValue(result.contents[2])).toMatch(
+        "[Create note from template for 'placeholder'](command:foam-vscode.create-note?"
+      );
       ws.dispose();
       graph.dispose();
     });

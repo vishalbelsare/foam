@@ -1,12 +1,11 @@
 import { IDisposable } from '../common/lifecycle';
-import { IDataStore, IMatcher } from '../services/datastore';
+import { IDataStore, IMatcher, IWatcher } from '../services/datastore';
 import { FoamWorkspace } from './workspace';
 import { FoamGraph } from './graph';
 import { ResourceParser } from './note';
 import { ResourceProvider } from './provider';
-import { createMarkdownParser } from '../services/markdown-parser';
 import { FoamTags } from './tags';
-import { Logger } from '../utils/log';
+import { Logger, withTiming, withTimingAsync } from '../utils/log';
 
 export interface Services {
   dataStore: IDataStore;
@@ -23,32 +22,54 @@ export interface Foam extends IDisposable {
 
 export const bootstrap = async (
   matcher: IMatcher,
+  watcher: IWatcher | undefined,
   dataStore: IDataStore,
-  initialProviders: ResourceProvider[]
+  parser: ResourceParser,
+  initialProviders: ResourceProvider[],
+  defaultExtension: string = '.md'
 ) => {
-  const parser = createMarkdownParser([]);
-  const workspace = new FoamWorkspace();
-  const tsStart = Date.now();
+  const workspace = await withTimingAsync(
+    () =>
+      FoamWorkspace.fromProviders(
+        initialProviders,
+        dataStore,
+        defaultExtension
+      ),
+    ms => Logger.info(`Workspace loaded in ${ms}ms`)
+  );
 
-  await Promise.all(initialProviders.map(p => workspace.registerProvider(p)));
-  const tsWsDone = Date.now();
-  Logger.info(`Workspace loaded in ${tsWsDone - tsStart}ms`);
+  const graph = withTiming(
+    () => FoamGraph.fromWorkspace(workspace, true),
+    ms => Logger.info(`Graph loaded in ${ms}ms`)
+  );
 
-  const graph = FoamGraph.fromWorkspace(workspace, true, 500);
-  const tsGraphDone = Date.now();
-  Logger.info(`Graph loaded in ${tsGraphDone - tsWsDone}ms`);
+  const tags = withTiming(
+    () => FoamTags.fromWorkspace(workspace, true),
+    ms => Logger.info(`Tags loaded in ${ms}ms`)
+  );
 
-  const tags = FoamTags.fromWorkspace(workspace, true);
-  const tsTagsEnd = Date.now();
-  Logger.info(`Tags loaded in ${tsTagsEnd - tsGraphDone}ms`);
+  watcher?.onDidChange(async uri => {
+    if (matcher.isMatch(uri)) {
+      await workspace.fetchAndSet(uri);
+    }
+  });
+  watcher?.onDidCreate(async uri => {
+    await matcher.refresh();
+    if (matcher.isMatch(uri)) {
+      await workspace.fetchAndSet(uri);
+    }
+  });
+  watcher?.onDidDelete(uri => {
+    workspace.delete(uri);
+  });
 
   const foam: Foam = {
     workspace,
     graph,
     tags,
     services: {
-      dataStore,
       parser,
+      dataStore,
       matcher,
     },
     dispose: () => {

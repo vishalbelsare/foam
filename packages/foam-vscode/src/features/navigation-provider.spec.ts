@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { URI } from '../core/model/uri';
 import { createTestWorkspace } from '../test/test-utils';
 import {
   cleanWorkspace,
@@ -8,10 +7,12 @@ import {
   showInEditor,
 } from '../test/test-utils-vscode';
 import { NavigationProvider } from './navigation-provider';
-import { OPEN_COMMAND } from './utility-commands';
 import { toVsCodeUri } from '../utils/vsc-utils';
 import { createMarkdownParser } from '../core/services/markdown-parser';
 import { FoamGraph } from '../core/model/graph';
+import { commandAsURI } from '../utils/commands';
+import { CREATE_NOTE_COMMAND } from './commands/create-note';
+import { Location } from '../core/model/location';
 
 describe('Document navigation', () => {
   const parser = createMarkdownParser([]);
@@ -54,7 +55,7 @@ describe('Document navigation', () => {
       expect(links.length).toEqual(0);
     });
 
-    it('should create links for wikilinks', async () => {
+    it('should not create links for wikilinks, as this is managed by the definition provider', async () => {
       const fileA = await createFile('# File A', ['file-a.md']);
       const fileB = await createFile(`this is a link to [[${fileA.name}]].`);
       const ws = createTestWorkspace()
@@ -66,16 +67,13 @@ describe('Document navigation', () => {
       const provider = new NavigationProvider(ws, graph, parser);
       const links = provider.provideDocumentLinks(doc);
 
-      expect(links.length).toEqual(1);
-      expect(links[0].target).toEqual(OPEN_COMMAND.asURI(fileA.uri));
-      expect(links[0].range).toEqual(new vscode.Range(0, 20, 0, 26));
+      expect(links.length).toEqual(0);
     });
 
     it('should create links for placeholders', async () => {
       const fileA = await createFile(`this is a link to [[a placeholder]].`);
-      const ws = createTestWorkspace().set(
-        parser.parse(fileA.uri, fileA.content)
-      );
+      const noteA = parser.parse(fileA.uri, fileA.content);
+      const ws = createTestWorkspace().set(noteA);
       const graph = FoamGraph.fromWorkspace(ws);
 
       const { doc } = await showInEditor(fileA.uri);
@@ -84,7 +82,15 @@ describe('Document navigation', () => {
 
       expect(links.length).toEqual(1);
       expect(links[0].target).toEqual(
-        OPEN_COMMAND.asURI(URI.placeholder('a placeholder'))
+        commandAsURI(
+          CREATE_NOTE_COMMAND.forPlaceholder(
+            Location.forObjectWithRange(noteA.uri, noteA.links[0]),
+            '.md',
+            {
+              onFileExists: 'open',
+            }
+          )
+        )
       );
       expect(links[0].range).toEqual(new vscode.Range(0, 20, 0, 33));
     });
@@ -124,8 +130,8 @@ describe('Document navigation', () => {
 
       expect(definitions.length).toEqual(1);
       expect(definitions[0].targetUri).toEqual(toVsCodeUri(fileA.uri));
-      // target the whole file
-      expect(definitions[0].targetRange).toEqual(new vscode.Range(0, 0, 0, 8));
+      // target the beginning of the file
+      expect(definitions[0].targetRange).toEqual(new vscode.Range(0, 0, 0, 0));
       // select nothing
       expect(definitions[0].targetSelectionRange).toEqual(
         new vscode.Range(0, 0, 0, 0)
@@ -225,6 +231,10 @@ describe('Document navigation', () => {
         doc,
         new vscode.Position(0, 26)
       );
+
+      // Make sure the references are sorted by position, so we match the right expectation
+      refs.sort((a, b) => a.range.start.character - b.range.start.character);
+
       expect(refs.length).toEqual(2);
       expect(refs[0]).toEqual({
         uri: toVsCodeUri(fileB.uri),

@@ -10,18 +10,16 @@
    - `git add *`
    - `git commit -m"Preparation for next release"`
 4. Update version
-   - `$ cd packages/foam-vscode`
-   - `foam-vscode$ yarn lerna version <version>` (where `version` is `patch/minor/major`) 
-   - `cd ../..`
+   - `$ yarn version-extension <version>` (where `version` is `patch/minor/major`) 
 5. Package extension
-   - `$ yarn vscode:package-extension`
+   - `$ yarn package-extension`
 6. Publish extension
-   - `$ yarn vscode:publish-extension`
+   - `$ yarn publish-extension`
 7. Update the release notes in GitHub
    - in GitHub, top right, click on "releases"
    - select "tags" in top left
    - select the tag that was just released, click "edit" and copy release information from changelog
    - publish (no need to attach artifacts)
-8. Annouce on Discord
+8. Announce on Discord
 
 Steps 1 to 6 should really be replaced by a GitHub action...

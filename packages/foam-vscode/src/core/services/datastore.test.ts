@@ -1,7 +1,7 @@
-import { readFileFromFs, TEST_DATA_DIR } from '../../test/test-utils';
+import { Matcher, toMatcherPathFormat } from '../../test/test-datastore';
+import { TEST_DATA_DIR } from '../../test/test-utils';
 import { URI } from '../model/uri';
 import { Logger } from '../utils/log';
-import { FileDataStore, Matcher, toMatcherPathFormat } from './datastore';
 
 Logger.setLevel('error');
 
@@ -62,11 +62,11 @@ describe('Matcher', () => {
   });
 
   it('happy path', () => {
-    const matcher = new Matcher([URI.file('/')], ['**/*'], ['**/*.pdf']);
-    expect(matcher.isMatch(URI.file('/file.md'))).toBeTruthy();
-    expect(matcher.isMatch(URI.file('/file.pdf'))).toBeFalsy();
-    expect(matcher.isMatch(URI.file('/dir/file.md'))).toBeTruthy();
-    expect(matcher.isMatch(URI.file('/dir/file.pdf'))).toBeFalsy();
+    const matcher = new Matcher([URI.file('/root/')], ['**/*'], ['**/*.pdf']);
+    expect(matcher.isMatch(URI.file('/root/file.md'))).toBeTruthy();
+    expect(matcher.isMatch(URI.file('/root/file.pdf'))).toBeFalsy();
+    expect(matcher.isMatch(URI.file('/root/dir/file.md'))).toBeTruthy();
+    expect(matcher.isMatch(URI.file('/root/dir/file.pdf'))).toBeFalsy();
   });
 
   it('ignores files in the exclude list', () => {
@@ -81,13 +81,5 @@ describe('Matcher', () => {
     expect(matcher.isMatch(files[1])).toEqual(true);
     expect(matcher.isMatch(files[2])).toEqual(false);
     expect(matcher.isMatch(files[3])).toEqual(false);
-  });
-});
-
-describe('Datastore', () => {
-  it('uses the matcher to get the file list', async () => {
-    const matcher = new Matcher([testFolder], ['**/*.md'], []);
-    const ds = new FileDataStore(readFileFromFs);
-    expect((await ds.list(matcher.include[0])).length).toEqual(4);
   });
 });

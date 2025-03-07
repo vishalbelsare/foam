@@ -1,44 +1,44 @@
 import * as vscode from 'vscode';
-import { FoamFeature } from '../types';
-import { mdDocSelector } from '../utils';
 import { toVsCodeRange, toVsCodeUri, fromVsCodeUri } from '../utils/vsc-utils';
-import { OPEN_COMMAND } from './utility-commands';
 import { Foam } from '../core/model/foam';
 import { FoamWorkspace } from '../core/model/workspace';
 import { Resource, ResourceLink, ResourceParser } from '../core/model/note';
 import { URI } from '../core/model/uri';
 import { Range } from '../core/model/range';
 import { FoamGraph } from '../core/model/graph';
+import { Position } from '../core/model/position';
+import { CREATE_NOTE_COMMAND } from './commands/create-note';
+import { commandAsURI } from '../utils/commands';
+import { Location } from '../core/model/location';
+import { mdDocSelector } from '../services/editor';
 
-const feature: FoamFeature = {
-  activate: async (
-    context: vscode.ExtensionContext,
-    foamPromise: Promise<Foam>
-  ) => {
-    const foam = await foamPromise;
+export default async function activate(
+  context: vscode.ExtensionContext,
+  foamPromise: Promise<Foam>
+) {
+  const foam = await foamPromise;
 
-    const navigationProvider = new NavigationProvider(
-      foam.workspace,
-      foam.graph,
-      foam.services.parser
-    );
+  const navigationProvider = new NavigationProvider(
+    foam.workspace,
+    foam.graph,
+    foam.services.parser
+  );
 
-    context.subscriptions.push(
-      vscode.languages.registerDefinitionProvider(
-        mdDocSelector,
-        navigationProvider
-      ),
-      vscode.languages.registerDocumentLinkProvider(
-        mdDocSelector,
-        navigationProvider
-      ),
-      vscode.languages.registerReferenceProvider(
-        mdDocSelector,
-        navigationProvider
-      )
-    );
-  },
-};
+  context.subscriptions.push(
+    vscode.languages.registerDefinitionProvider(
+      mdDocSelector,
+      navigationProvider
+    ),
+    vscode.languages.registerDocumentLinkProvider(
+      mdDocSelector,
+      navigationProvider
+    ),
+    vscode.languages.registerReferenceProvider(
+      mdDocSelector,
+      navigationProvider
+    )
+  );
+}
 
 /**
  * Provides navigation and references for Foam links.
@@ -56,7 +56,8 @@ export class NavigationProvider
   implements
     vscode.DefinitionProvider,
     vscode.DocumentLinkProvider,
-    vscode.ReferenceProvider {
+    vscode.ReferenceProvider
+{
   constructor(
     private workspace: FoamWorkspace,
     private graph: FoamGraph,
@@ -64,7 +65,7 @@ export class NavigationProvider
   ) {}
 
   /**
-   * Provide references for links and placholders
+   * Provide references for links and placeholders
    */
   public provideReferences(
     document: vscode.TextDocument,
@@ -119,10 +120,7 @@ export class NavigationProvider
 
     const targetRange = section
       ? section.range
-      : Range.createFromPosition(
-          targetResource.source.contentStart,
-          targetResource.source.end
-        );
+      : Range.createFromPosition(Position.create(0, 0), Position.create(0, 0));
     const targetSelectionRange = section
       ? section.range
       : Range.createFromPosition(targetRange.start);
@@ -149,10 +147,8 @@ export class NavigationProvider
   public provideDocumentLinks(
     document: vscode.TextDocument
   ): vscode.DocumentLink[] {
-    const resource = this.parser.parse(
-      fromVsCodeUri(document.uri),
-      document.getText()
-    );
+    const documentUri = fromVsCodeUri(document.uri);
+    const resource = this.parser.parse(documentUri, document.getText());
 
     const targets: { link: ResourceLink; target: URI }[] = resource.links.map(
       link => ({
@@ -161,23 +157,28 @@ export class NavigationProvider
       })
     );
 
-    return targets.map(o => {
-      const command = OPEN_COMMAND.asURI(o.target);
-      const documentLink = new vscode.DocumentLink(
-        new vscode.Range(
-          o.link.range.start.line,
-          o.link.range.start.character + 2,
-          o.link.range.end.line,
-          o.link.range.end.character - 2
-        ),
-        command
-      );
-      documentLink.tooltip = o.target.isPlaceholder()
-        ? `Create note for '${o.target.path}'`
-        : `Go to ${o.target.toFsPath()}`;
-      return documentLink;
-    });
+    return targets
+      .filter(o => o.target.isPlaceholder()) // links to resources are managed by the definition provider
+      .map(o => {
+        const command = CREATE_NOTE_COMMAND.forPlaceholder(
+          Location.forObjectWithRange(documentUri, o.link),
+          this.workspace.defaultExtension,
+          {
+            onFileExists: 'open',
+          }
+        );
+
+        const documentLink = new vscode.DocumentLink(
+          new vscode.Range(
+            o.link.range.start.line,
+            o.link.range.start.character + 2,
+            o.link.range.end.line,
+            o.link.range.end.character - 2
+          ),
+          commandAsURI(command)
+        );
+        documentLink.tooltip = `Create note for '${o.target.path}'`;
+        return documentLink;
+      });
   }
 }
-
-export default feature;

@@ -1,35 +1,51 @@
 import { URI } from '../core/model/uri';
-import { TextEncoder } from 'util';
-import { FileType, SnippetString, ViewColumn, window, workspace } from 'vscode';
-import { focusNote } from '../utils';
+import {
+  SnippetString,
+  ViewColumn,
+  QuickPickItem,
+  commands,
+  window,
+  workspace,
+} from 'vscode';
 import { fromVsCodeUri, toVsCodeUri } from '../utils/vsc-utils';
 import { extractFoamTemplateFrontmatterMetadata } from '../utils/template-frontmatter-parser';
 import { UserCancelledOperation } from './errors';
 import {
+  asAbsoluteWorkspaceUri,
   createDocAndFocus,
+  deleteFile,
+  fileExists,
   findSelectionContent,
+  focusNote,
   getCurrentEditorDirectory,
+  readFile,
   replaceSelection,
 } from './editor';
 import { Resolver } from './variable-resolver';
 import dateFormat from 'dateformat';
+import { getFoamVsCodeConfig } from './config';
+import { firstFrom, isNone } from '../core/utils';
 
 /**
  * The templates directory
  */
-export const TEMPLATES_DIR = fromVsCodeUri(
-  workspace.workspaceFolders[0].uri
-).joinPath('.foam', 'templates');
+export const getTemplatesDir = () =>
+  fromVsCodeUri(workspace.workspaceFolders[0].uri).joinPath(
+    '.foam',
+    'templates'
+  );
 
 /**
  * The URI of the default template
  */
-export const DEFAULT_TEMPLATE_URI = TEMPLATES_DIR.joinPath('new-note.md');
+export const getDefaultTemplateUri = () =>
+  getTemplatesDir().joinPath('new-note.md');
 
 /**
  * The URI of the template for daily notes
  */
-export const DAILY_NOTE_TEMPLATE_URI = TEMPLATES_DIR.joinPath('daily-note.md');
+export const getDailyNoteTemplateUri = () =>
+  getTemplatesDir().joinPath('daily-note.md');
 
 const WIKILINK_DEFAULT_TEMPLATE_TEXT = `# $\{1:$FOAM_TITLE}\n\n$0`;
 
@@ -55,9 +71,7 @@ For a full list of features see [the VS Code snippets page](https://code.visuals
 export async function getTemplateMetadata(
   templateUri: URI
 ): Promise<Map<string, string>> {
-  const contents = await workspace.fs
-    .readFile(toVsCodeUri(templateUri))
-    .then(bytes => bytes.toString());
+  const contents = (await readFile(templateUri)) ?? '';
   const [templateMetadata] = extractFoamTemplateFrontmatterMetadata(contents);
   return templateMetadata;
 }
@@ -74,20 +88,14 @@ export async function getTemplateInfo(
   templateFallbackText = '',
   resolver: Resolver
 ) {
-  const templateText = (await fileExists(templateUri))
-    ? await workspace.fs
-        .readFile(toVsCodeUri(templateUri))
-        .then(bytes => bytes.toString())
-    : templateFallbackText;
+  const templateText = (await readFile(templateUri)) ?? templateFallbackText;
 
   const templateWithResolvedVariables = await resolver.resolveText(
     templateText
   );
 
-  const [
-    templateMetadata,
-    templateWithFoamFrontmatterRemoved,
-  ] = extractFoamTemplateFrontmatterMetadata(templateWithResolvedVariables);
+  const [templateMetadata, templateWithFoamFrontmatterRemoved] =
+    extractFoamTemplateFrontmatterMetadata(templateWithResolvedVariables);
 
   return {
     metadata: templateMetadata,
@@ -95,7 +103,230 @@ export async function getTemplateInfo(
   };
 }
 
+export type OnFileExistStrategy =
+  | 'open'
+  | 'overwrite'
+  | 'cancel'
+  | 'ask'
+  | ((filePath: URI) => Promise<URI | undefined>);
+
+export type OnRelativePathStrategy =
+  | 'resolve-from-root'
+  | 'resolve-from-current-dir'
+  | 'cancel'
+  | 'ask'
+  | ((filePath: URI) => Promise<URI | undefined>);
+
+export async function askUserForTemplate() {
+  const templates = await getTemplates();
+  if (templates.length === 0) {
+    return offerToCreateTemplate();
+  }
+
+  const templatesMetadata = (
+    await Promise.all(
+      templates.map(async templateUri => {
+        const metadata = await getTemplateMetadata(templateUri);
+        metadata.set('templatePath', templateUri.getBasename());
+        return metadata;
+      })
+    )
+  ).sort(sortTemplatesMetadata);
+
+  const items: QuickPickItem[] = await Promise.all(
+    templatesMetadata.map(metadata => {
+      const label = metadata.get('name') || metadata.get('templatePath');
+      const description = metadata.get('name')
+        ? metadata.get('templatePath')
+        : null;
+      const detail = metadata.get('description');
+      const item = {
+        label: label,
+        description: description,
+        detail: detail,
+      };
+      Object.keys(item).forEach(key => {
+        if (!item[key]) {
+          delete item[key];
+        }
+      });
+      return item;
+    })
+  );
+
+  const selectedTemplate = await window.showQuickPick(items, {
+    placeHolder: 'Select a template to use.',
+  });
+
+  if (selectedTemplate === undefined) {
+    return undefined;
+  }
+  const templateFilename =
+    (selectedTemplate as QuickPickItem).description ||
+    (selectedTemplate as QuickPickItem).label;
+  const templateUri = getTemplatesDir().joinPath(templateFilename);
+  return templateUri;
+}
+
+async function offerToCreateTemplate(): Promise<void> {
+  const response = await window.showQuickPick(['Yes', 'No'], {
+    placeHolder:
+      'No templates available. Would you like to create one instead?',
+  });
+  if (response === 'Yes') {
+    commands.executeCommand('foam-vscode.create-new-template');
+    return;
+  }
+}
+
+function sortTemplatesMetadata(
+  t1: Map<string, string>,
+  t2: Map<string, string>
+) {
+  // Sort by name's existence, then name, then path
+
+  if (t1.get('name') === undefined && t2.get('name') !== undefined) {
+    return 1;
+  }
+
+  if (t1.get('name') !== undefined && t2.get('name') === undefined) {
+    return -1;
+  }
+
+  const pathSortOrder = t1
+    .get('templatePath')
+    .localeCompare(t2.get('templatePath'));
+
+  if (t1.get('name') === undefined && t2.get('name') === undefined) {
+    return pathSortOrder;
+  }
+
+  const nameSortOrder = t1.get('name').localeCompare(t2.get('name'));
+
+  return nameSortOrder || pathSortOrder;
+}
+
+const createFnForOnRelativePathStrategy =
+  (onRelativePath: OnRelativePathStrategy | undefined) =>
+  async (existingFile: URI) => {
+    // Get the default from the configuration
+    if (isNone(onRelativePath)) {
+      onRelativePath =
+        getFoamVsCodeConfig('files.newNotePath') === 'root'
+          ? 'resolve-from-root'
+          : 'resolve-from-current-dir';
+    }
+
+    if (typeof onRelativePath === 'function') {
+      return onRelativePath(existingFile);
+    }
+
+    switch (onRelativePath) {
+      case 'resolve-from-current-dir':
+        return getCurrentEditorDirectory().joinPath(existingFile.path);
+      case 'resolve-from-root':
+        return asAbsoluteWorkspaceUri(existingFile);
+      case 'cancel':
+        return undefined;
+      case 'ask':
+      default: {
+        const newProposedPath = await askUserForFilepathConfirmation(
+          existingFile
+        );
+        return newProposedPath && existingFile.with({ path: newProposedPath });
+      }
+    }
+  };
+
+const createFnForOnFileExistsStrategy =
+  (onFileExists: OnFileExistStrategy) => async (existingFile: URI) => {
+    if (typeof onFileExists === 'function') {
+      return onFileExists(existingFile);
+    }
+    switch (onFileExists) {
+      case 'open':
+        await commands.executeCommand('vscode.open', toVsCodeUri(existingFile));
+        return;
+      case 'overwrite':
+        await deleteFile(existingFile);
+        return existingFile;
+      case 'cancel':
+        return undefined;
+      case 'ask':
+      default: {
+        const newProposedPath = await askUserForFilepathConfirmation(
+          existingFile
+        );
+        return newProposedPath && existingFile.with({ path: newProposedPath });
+      }
+    }
+  };
+
 export const NoteFactory = {
+  createNote: async (
+    newFilePath: URI,
+    text: string,
+    resolver: Resolver,
+    onFileExistsStrategy?: OnFileExistStrategy,
+    onRelativePathStrategy?: OnRelativePathStrategy,
+    replaceSelectionWithLink = true
+  ): Promise<{ didCreateFile: boolean; uri: URI | undefined }> => {
+    try {
+      const onRelativePath = createFnForOnRelativePathStrategy(
+        onRelativePathStrategy
+      );
+      const onFileExists =
+        createFnForOnFileExistsStrategy(onFileExistsStrategy);
+
+      /**
+       * Make sure the path is absolute and doesn't exist
+       */
+      while ((await fileExists(newFilePath)) || !newFilePath.isAbsolute()) {
+        while (!newFilePath.isAbsolute()) {
+          const proposedNewFilepath = await onRelativePath(newFilePath);
+          if (proposedNewFilepath === undefined) {
+            return { didCreateFile: false, uri: newFilePath };
+          }
+          newFilePath = proposedNewFilepath;
+        }
+        while (newFilePath.isAbsolute() && (await fileExists(newFilePath))) {
+          const proposedNewFilepath = await onFileExists(newFilePath);
+          if (proposedNewFilepath === undefined) {
+            return { didCreateFile: false, uri: newFilePath };
+          }
+          newFilePath = proposedNewFilepath;
+        }
+      }
+
+      const expandedText = await resolver.resolveText(text);
+      const selectedContent = findSelectionContent();
+      await createDocAndFocus(
+        new SnippetString(expandedText),
+        newFilePath,
+        selectedContent ? ViewColumn.Beside : ViewColumn.Active
+      );
+
+      if (replaceSelectionWithLink && selectedContent !== undefined) {
+        const newNoteTitle = newFilePath.getName();
+
+        // This should really use the FoamWorkspace.getIdentifier() function,
+        // but for simplicity we just use newNoteTitle
+        await replaceSelection(
+          selectedContent.document,
+          selectedContent.selection,
+          `[[${newNoteTitle}]]`
+        );
+      }
+
+      return { didCreateFile: true, uri: newFilePath };
+    } catch (err) {
+      if (err instanceof UserCancelledOperation) {
+        return;
+      }
+      throw err;
+    }
+  },
+
   /**
    * Creates a new note using a template.
    * @param templateUri the URI of the template to use.
@@ -108,60 +339,32 @@ export const NoteFactory = {
     resolver: Resolver,
     filepathFallbackURI?: URI,
     templateFallbackText = '',
-    onFileExists?: (filePath: URI) => Promise<string | undefined>
+    onFileExists?: OnFileExistStrategy
   ): Promise<{ didCreateFile: boolean; uri: URI | undefined }> => {
     try {
-      onFileExists = onFileExists
-        ? onFileExists
-        : (existingFile: URI) => {
-            const filename = existingFile.getBasename();
-            return askUserForFilepathConfirmation(existingFile, filename);
-          };
-
       const template = await getTemplateInfo(
         templateUri,
         templateFallbackText,
         resolver
       );
 
-      const selectedContent = findSelectionContent();
-      if (selectedContent?.content) {
-        resolver.define('FOAM_SELECTED_TEXT', selectedContent?.content);
-      }
+      const pathSources = [
+        () =>
+          template.metadata.has('filepath')
+            ? asAbsoluteWorkspaceUri(template.metadata.get('filepath'))
+            : null,
+        () => filepathFallbackURI,
+        () => getPathFromTitle(templateUri.scheme, resolver),
+      ];
 
-      const templateSnippet = new SnippetString(template.text);
+      const newFilePath = await firstFrom(pathSources);
 
-      let newFilePath = await determineNewNoteFilepath(
-        template.metadata.get('filepath'),
-        filepathFallbackURI,
-        resolver
-      );
-      while (await fileExists(newFilePath)) {
-        const proposedNewFilepath = await onFileExists(newFilePath);
-
-        if (proposedNewFilepath === undefined) {
-          return { didCreateFile: false, uri: newFilePath };
-        }
-        newFilePath = URI.file(proposedNewFilepath);
-      }
-
-      await createDocAndFocus(
-        templateSnippet,
+      return NoteFactory.createNote(
         newFilePath,
-        selectedContent ? ViewColumn.Beside : ViewColumn.Active
+        template.text,
+        resolver,
+        onFileExists
       );
-
-      if (selectedContent !== undefined) {
-        const newNoteTitle = newFilePath.getName();
-
-        await replaceSelection(
-          selectedContent.document,
-          selectedContent.selection,
-          `[[${newNoteTitle}]]`
-        );
-      }
-
-      return { didCreateFile: true, uri: newFilePath };
     } catch (err) {
       if (err instanceof UserCancelledOperation) {
         return;
@@ -185,7 +388,7 @@ export const NoteFactory = {
       targetDate
     );
     return NoteFactory.createFromTemplate(
-      DAILY_NOTE_TEMPLATE_URI,
+      getDailyNoteTemplateUri(),
       resolver,
       filepathFallbackURI,
       templateFallbackText,
@@ -197,17 +400,24 @@ export const NoteFactory = {
    * Creates a new note when following a placeholder wikilink using the default template.
    * @param wikilinkPlaceholder the placeholder value from the wikilink. (eg. `[[Hello Joe]]` -> `Hello Joe`)
    * @param filepathFallbackURI the URI to use if the template does not specify the `filepath` metadata attribute. This is configurable by the caller for backwards compatibility purposes.
+   * @param templateURI URI of the template to use. If undefined, use the default template.
    */
-  createForPlaceholderWikilink: (
+  createForPlaceholderWikilink: async (
     wikilinkPlaceholder: string,
-    filepathFallbackURI: URI
+    filepathFallbackURI: URI,
+    templateURI?: URI
   ): Promise<{ didCreateFile: boolean; uri: URI | undefined }> => {
     const resolver = new Resolver(
       new Map().set('FOAM_TITLE', wikilinkPlaceholder),
       new Date()
     );
+
+    if (templateURI === undefined) {
+      templateURI = getDefaultTemplateUri();
+    }
+
     return NoteFactory.createFromTemplate(
-      DEFAULT_TEMPLATE_URI,
+      templateURI,
       resolver,
       filepathFallbackURI,
       WIKILINK_DEFAULT_TEMPLATE_TEXT
@@ -217,7 +427,7 @@ export const NoteFactory = {
 
 export const createTemplate = async (): Promise<void> => {
   const defaultFilename = 'new-template.md';
-  const defaultTemplate = TEMPLATES_DIR.joinPath(defaultFilename);
+  const defaultTemplate = getTemplatesDir().joinPath(defaultFilename);
   const fsPath = defaultTemplate.toFsPath();
   const filename = await window.showInputBox({
     prompt: `Enter the filename for the new template`,
@@ -234,7 +444,7 @@ export const createTemplate = async (): Promise<void> => {
     return;
   }
 
-  const filenameURI = URI.file(filename);
+  const filenameURI = defaultTemplate.with({ path: filename });
   await workspace.fs.writeFile(
     toVsCodeUri(filenameURI),
     new TextEncoder().encode(TEMPLATE_CONTENT)
@@ -243,54 +453,30 @@ export const createTemplate = async (): Promise<void> => {
 };
 
 async function askUserForFilepathConfirmation(
-  defaultFilepath: URI,
-  defaultFilename: string
-) {
+  defaultFilepath: URI
+): Promise<string | undefined> {
   const fsPath = defaultFilepath.toFsPath();
-  return await window.showInputBox({
-    prompt: `Enter the filename for the new note`,
+  const defaultFilename = defaultFilepath.getBasename();
+  const defaultExtension = defaultFilepath.getExtension();
+  return window.showInputBox({
+    prompt: `Enter the path for the new note`,
     value: fsPath,
-    valueSelection: [fsPath.length - defaultFilename.length, fsPath.length - 3],
+    valueSelection: [
+      fsPath.length - defaultFilename.length,
+      fsPath.length - defaultExtension.length,
+    ],
     validateInput: async value =>
       value.trim().length === 0
         ? 'Please enter a value'
         : (await fileExists(URI.parse(value)))
         ? 'File already exists'
+        : !URI.parse(value).isAbsolute()
+        ? 'Path needs to be absolute'
         : undefined,
   });
 }
 
-export async function determineNewNoteFilepath(
-  templateFilepathAttribute: string | undefined,
-  fallbackURI: URI | undefined,
-  resolver: Resolver
-): Promise<URI> {
-  if (templateFilepathAttribute) {
-    let defaultFilepath = URI.file(templateFilepathAttribute);
-    if (!defaultFilepath.isAbsolute()) {
-      defaultFilepath = fromVsCodeUri(
-        workspace.workspaceFolders[0].uri
-      ).joinPath(templateFilepathAttribute);
-    }
-    return defaultFilepath;
-  }
-
-  if (fallbackURI) {
-    return fallbackURI;
-  }
-
-  const defaultName = await resolver.resolveFromName('FOAM_TITLE');
-  const defaultFilepath = getCurrentEditorDirectory().joinPath(
-    `${defaultName}.md`
-  );
-  return defaultFilepath;
-}
-
-async function fileExists(uri: URI): Promise<boolean> {
-  try {
-    const stat = await workspace.fs.stat(toVsCodeUri(uri));
-    return stat.type === FileType.File;
-  } catch (e) {
-    return false;
-  }
-}
+export const getPathFromTitle = async (scheme: string, resolver: Resolver) => {
+  const defaultName = await resolver.resolveFromName('FOAM_TITLE_SAFE');
+  return new URI({ scheme, path: `${defaultName}.md` });
+};

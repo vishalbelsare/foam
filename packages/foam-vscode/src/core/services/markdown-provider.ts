@@ -8,74 +8,23 @@ import { isNone, isSome } from '../utils';
 import { Logger } from '../utils/log';
 import { URI } from '../model/uri';
 import { FoamWorkspace } from '../model/workspace';
-import { IDataStore, IMatcher } from '../services/datastore';
 import { IDisposable } from '../common/lifecycle';
 import { ResourceProvider } from '../model/provider';
-import { createMarkdownParser } from './markdown-parser';
 import { MarkdownLink } from './markdown-link';
+import { IDataStore } from './datastore';
+import { uniqBy } from 'lodash';
 
 export class MarkdownResourceProvider implements ResourceProvider {
   private disposables: IDisposable[] = [];
 
   constructor(
-    private readonly matcher: IMatcher,
     private readonly dataStore: IDataStore,
-    private readonly watcherInit?: (triggers: {
-      onDidChange: (uri: URI) => void;
-      onDidCreate: (uri: URI) => void;
-      onDidDelete: (uri: URI) => void;
-    }) => IDisposable[],
-    private readonly parser: ResourceParser = createMarkdownParser([])
+    private readonly parser: ResourceParser,
+    public readonly noteExtensions: string[] = ['.md']
   ) {}
 
-  async init(workspace: FoamWorkspace) {
-    const filesByFolder = await Promise.all(
-      this.matcher.include.map(glob =>
-        this.dataStore.list(glob, this.matcher.exclude)
-      )
-    );
-    const files = this.matcher
-      .match(filesByFolder.flat())
-      .filter(this.supports);
-
-    await Promise.all(
-      files.map(async uri => {
-        Logger.info('Found: ' + uri.toString());
-        const content = await this.dataStore.read(uri);
-        if (isSome(content)) {
-          workspace.set(this.parser.parse(uri, content));
-        }
-      })
-    );
-
-    this.disposables =
-      this.watcherInit?.({
-        onDidChange: async uri => {
-          if (this.matcher.isMatch(uri) && this.supports(uri)) {
-            const content = await this.dataStore.read(uri);
-            isSome(content) &&
-              workspace.set(await this.parser.parse(uri, content));
-          }
-        },
-        onDidCreate: async uri => {
-          if (this.matcher.isMatch(uri) && this.supports(uri)) {
-            const content = await this.dataStore.read(uri);
-            isSome(content) &&
-              workspace.set(await this.parser.parse(uri, content));
-          }
-        },
-        onDidDelete: uri => {
-          this.supports(uri) && workspace.delete(uri);
-        },
-      }) ?? [];
-  }
-
   supports(uri: URI) {
-    return uri.isMarkdown();
-  }
-
-  read(uri: URI): Promise<string | null> {
-    return this.dataStore.read(uri);
+    return this.noteExtensions.includes(uri.getExtension());
   }
 
   async readAsMarkdown(uri: URI): Promise<string | null> {
@@ -94,7 +43,7 @@ export class MarkdownResourceProvider implements ResourceProvider {
   }
 
   async fetch(uri: URI) {
-    const content = await this.read(uri);
+    const content = await this.dataStore.read(uri);
     return isSome(content) ? this.parser.parse(uri, content) : null;
   }
 
@@ -127,7 +76,7 @@ export class MarkdownResourceProvider implements ResourceProvider {
                 URI.placeholder(target);
 
           if (section) {
-            targetUri = targetUri.withFragment(section);
+            targetUri = targetUri.with({ fragment: section });
           }
         }
         break;
@@ -144,7 +93,7 @@ export class MarkdownResourceProvider implements ResourceProvider {
           workspace.find(path, resource.uri)?.uri ??
           URI.placeholder(resource.uri.resolve(path).path);
         if (section && !targetUri.isPlaceholder()) {
-          targetUri = targetUri.withFragment(section);
+          targetUri = targetUri.with({ fragment: section });
         }
         break;
       }
@@ -159,27 +108,19 @@ export class MarkdownResourceProvider implements ResourceProvider {
 
 export function createMarkdownReferences(
   workspace: FoamWorkspace,
-  noteUri: URI,
+  source: Resource | URI,
   includeExtension: boolean
 ): NoteLinkDefinition[] {
-  const source = workspace.find(noteUri);
-  // Should never occur since we're already in a file,
-  if (source?.type !== 'note') {
-    console.warn(
-      `Note ${noteUri.toString()} note found in workspace when attempting \
-to generate markdown reference list`
-    );
-    return [];
-  }
+  const resource = source instanceof URI ? workspace.find(source) : source;
 
-  return source.links
+  const definitions = resource.links
     .filter(link => link.type === 'wikilink')
     .map(link => {
-      const targetUri = workspace.resolveLink(source, link);
+      const targetUri = workspace.resolveLink(resource, link);
       const target = workspace.find(targetUri);
       if (isNone(target)) {
         Logger.warn(
-          `Link ${targetUri.toString()} in ${noteUri.toString()} is not valid.`
+          `Link ${targetUri.toString()} in ${resource.uri.toString()} is not valid.`
         );
         return null;
       }
@@ -188,34 +129,33 @@ to generate markdown reference list`
         return null;
       }
 
-      let relativeUri = target.uri.relativeTo(noteUri.getDirectory());
-      if (!includeExtension) {
+      let relativeUri = target.uri.relativeTo(resource.uri.getDirectory());
+      if (
+        !includeExtension &&
+        relativeUri.path.endsWith(workspace.defaultExtension)
+      ) {
         relativeUri = relativeUri.changeExtension('*', '');
       }
 
+      // Extract base path and link name separately.
+      const basePath = relativeUri.path.split('/').slice(0, -1).join('/');
+      const linkName = relativeUri.path.split('/').pop();
+
+      const encodedURL = encodeURIComponent(linkName).replace(/%20/g, ' ');
+
       // [wikilink-text]: path/to/file.md "Page title"
       return {
-        label:
-          link.rawText.indexOf('[[') > -1
-            ? link.rawText.substring(2, link.rawText.length - 2)
-            : link.rawText,
-        url: relativeUri.path,
+        // embedded looks like ![[note-a]]
+        // regular note looks like [[note-a]]
+        label: link.rawText.substring(
+          link.isEmbed ? 3 : 2,
+          link.rawText.length - 2
+        ),
+        url: `${basePath ? basePath + '/' : ''}${encodedURL}`,
         title: target.title,
       };
     })
     .filter(isSome)
     .sort();
-}
-
-export function stringifyMarkdownLinkReferenceDefinition(
-  definition: NoteLinkDefinition
-) {
-  const url =
-    definition.url.indexOf(' ') > 0 ? `<${definition.url}>` : definition.url;
-  let text = `[${definition.label}]: ${url}`;
-  if (definition.title) {
-    text = `${text} "${definition.title}"`;
-  }
-
-  return text;
+  return uniqBy(definitions, def => NoteLinkDefinition.format(def));
 }

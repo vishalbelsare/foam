@@ -34,16 +34,21 @@ async function main() {
       // Passed to --extensionTestsPath
       const extensionTestsPath = path.join(__dirname, 'suite');
 
+      const testWorkspace = path.join(
+        extensionDevelopmentPath,
+        '.test-workspace'
+      );
+
       // Download VS Code, unzip it and run the integration test
       await runTests({
         extensionDevelopmentPath,
         extensionTestsPath,
         launchArgs: [
-          path.join(extensionDevelopmentPath, '.test-workspace'),
+          testWorkspace,
           '--disable-extensions',
           '--disable-workspace-trust',
         ],
-        version: '1.60.0',
+        version: '1.70.0',
       });
     } catch (err) {
       console.log('Error occurred while running Foam e2e tests:', err);
@@ -52,7 +57,9 @@ async function main() {
   }
 
   if (!isSuccess) {
-    throw new Error('Some Foam tests failed');
+    // throw new Error('Some Foam tests failed');
+    console.log('Some Foam tests failed');
+    process.exit(1);
   }
 }
 

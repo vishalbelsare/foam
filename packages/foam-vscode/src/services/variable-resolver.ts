@@ -10,6 +10,7 @@ import {
 
 const knownFoamVariables = new Set([
   'FOAM_TITLE',
+  'FOAM_TITLE_SAFE',
   'FOAM_SLUG',
   'FOAM_SELECTED_TEXT',
   'FOAM_DATE_YEAR',
@@ -18,6 +19,7 @@ const knownFoamVariables = new Set([
   'FOAM_DATE_MONTH_NAME',
   'FOAM_DATE_MONTH_NAME_SHORT',
   'FOAM_DATE_DATE',
+  'FOAM_DATE_WEEK',
   'FOAM_DATE_DAY_NAME',
   'FOAM_DATE_DAY_NAME_SHORT',
   'FOAM_DATE_HOUR',
@@ -131,6 +133,9 @@ export class Resolver implements VariableResolver {
         case 'FOAM_TITLE':
           value = resolveFoamTitle();
           break;
+        case 'FOAM_TITLE_SAFE':
+          value = resolveFoamTitleSafe(this);
+          break;
         case 'FOAM_SLUG':
           value = toSlug(await this.resolve(new Variable('FOAM_TITLE')));
           break;
@@ -165,6 +170,25 @@ export class Resolver implements VariableResolver {
             String(this.foamDate.getDate().valueOf()).padStart(2, '0')
           );
           break;
+        case 'FOAM_DATE_WEEK': {
+          // https://en.wikipedia.org/wiki/ISO_8601#Week_dates
+          const date = new Date(this.foamDate);
+
+          // Find Thursday of this week starting on Monday
+          date.setDate(date.getDate() + 4 - (date.getDay() || 7));
+          const thursday = date.getTime();
+
+          // Find January 1st
+          date.setMonth(0); // January
+          date.setDate(1); // 1st
+          const janFirst = date.getTime();
+
+          // Round the amount of days to compensate for daylight saving time
+          const days = Math.round((thursday - janFirst) / 86400000); // 1 day = 86400000 ms
+          const weekDay = Math.floor(days / 7) + 1;
+          value = Promise.resolve(String(weekDay.valueOf()).padStart(2, '0'));
+          break;
+        }
         case 'FOAM_DATE_DAY_NAME':
           value = Promise.resolve(
             this.foamDate.toLocaleString('default', { weekday: 'long' })
@@ -222,3 +246,29 @@ async function resolveFoamTitle() {
 function resolveFoamSelectedText() {
   return findSelectionContent()?.content ?? '';
 }
+
+/**
+ * Common chars that is better to avoid in file names.
+ * Inspired by:
+ *   https://www.mtu.edu/umc/services/websites/writing/characters-avoid/
+ *   https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names
+ * Even if some might be allowed in Win or Linux, to keep things more compatible and less error prone
+ * we don't allow them
+ * Also see https://github.com/foambubble/foam/issues/1042
+ */
+const UNALLOWED_CHARS = '/\\#%&{}<>?*$!\'":@+`|=';
+
+/**
+ * Uses the title to generate a file path.
+ * It sanitizes the title to remove special characters and spaces.
+ *
+ * @param resolver the resolver to use
+ * @returns the string path of the new note
+ */
+export const resolveFoamTitleSafe = async (resolver: Resolver) => {
+  let safeTitle = await resolver.resolveFromName('FOAM_TITLE');
+  UNALLOWED_CHARS.split('').forEach(char => {
+    safeTitle = safeTitle.split(char).join('-');
+  });
+  return safeTitle;
+};

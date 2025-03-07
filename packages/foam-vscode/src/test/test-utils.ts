@@ -6,9 +6,9 @@ import { Logger } from '../core/utils/log';
 import { Range } from '../core/model/range';
 import { URI } from '../core/model/uri';
 import { FoamWorkspace } from '../core/model/workspace';
-import { Matcher } from '../core/services/datastore';
 import { MarkdownResourceProvider } from '../core/services/markdown-provider';
 import { NoteLinkDefinition, Resource } from '../core/model/note';
+import { createMarkdownParser } from '../core/services/markdown-parser';
 
 export { default as waitForExpect } from 'wait-for-expect';
 
@@ -22,10 +22,6 @@ export const TEST_DATA_DIR = URI.file(__dirname).joinPath(
 
 const position = Range.create(0, 0, 0, 100);
 
-const documentStart = position.start;
-const documentEnd = position.end;
-const eol = '\n';
-
 /**
  * Turns a string into a URI
  * The goal of this function is to make sure we are consistent in the
@@ -35,11 +31,14 @@ export const strToUri = URI.file;
 
 export const createTestWorkspace = () => {
   const workspace = new FoamWorkspace();
-  const matcher = new Matcher([URI.file('/')], ['**/*']);
-  const provider = new MarkdownResourceProvider(matcher, {
-    read: _ => Promise.resolve(''),
-    list: _ => Promise.resolve([]),
-  });
+  const parser = createMarkdownParser();
+  const provider = new MarkdownResourceProvider(
+    {
+      read: _ => Promise.resolve(''),
+      list: () => Promise.resolve([]),
+    },
+    parser
+  );
   workspace.registerProvider(provider);
   return workspace;
 };
@@ -50,14 +49,16 @@ export const createTestNote = (params: {
   definitions?: NoteLinkDefinition[];
   links?: Array<{ slug: string } | { to: string }>;
   tags?: string[];
+  aliases?: string[];
   text?: string;
   sections?: string[];
   root?: URI;
+  type?: string;
 }): Resource => {
   const root = params.root ?? URI.file('/');
   return {
     uri: root.resolve(params.uri),
-    type: 'note',
+    type: params.type ?? 'note',
     properties: {},
     title: params.title ?? strToUri(params.uri).getBasename(),
     definitions: params.definitions ?? [],
@@ -68,6 +69,11 @@ export const createTestNote = (params: {
     tags:
       params.tags?.map(t => ({
         label: t,
+        range: Range.create(0, 0, 0, 0),
+      })) ?? [],
+    aliases:
+      params.aliases?.map(a => ({
+        title: a,
         range: Range.create(0, 0, 0, 0),
       })) ?? [],
     links: params.links
@@ -83,20 +89,16 @@ export const createTestNote = (params: {
                 type: 'wikilink',
                 range: range,
                 rawText: `[[${link.slug}]]`,
+                isEmbed: false,
               }
             : {
                 type: 'link',
                 range: range,
                 rawText: `[link text](${link.to})`,
+                isEmbed: false,
               };
         })
       : [],
-    source: {
-      eol: eol,
-      end: documentEnd,
-      contentStart: documentStart,
-      text: params.text ?? '',
-    },
   };
 };
 

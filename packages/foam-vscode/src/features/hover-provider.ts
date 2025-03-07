@@ -1,7 +1,5 @@
 import { uniqWith } from 'lodash';
 import * as vscode from 'vscode';
-import { FoamFeature } from '../types';
-import { getNoteTooltip, mdDocSelector, isSome } from '../utils';
 import { fromVsCodeUri, toVsCodeRange } from '../utils/vsc-utils';
 import {
   ConfigurationMonitor,
@@ -12,35 +10,37 @@ import { Foam } from '../core/model/foam';
 import { FoamWorkspace } from '../core/model/workspace';
 import { Range } from '../core/model/range';
 import { FoamGraph } from '../core/model/graph';
-import { OPEN_COMMAND } from './utility-commands';
+import { OPEN_COMMAND } from './commands/open-resource';
+import { CREATE_NOTE_COMMAND } from './commands/create-note';
+import { commandAsURI } from '../utils/commands';
+import { Location } from '../core/model/location';
+import { getNoteTooltip, mdDocSelector } from '../services/editor';
+import { isSome } from '../core/utils';
 
 export const CONFIG_KEY = 'links.hover.enable';
 
-const feature: FoamFeature = {
-  activate: async (
-    context: vscode.ExtensionContext,
-    foamPromise: Promise<Foam>
-  ) => {
-    const isHoverEnabled: ConfigurationMonitor<boolean> = monitorFoamVsCodeConfig(
-      CONFIG_KEY
-    );
+export default async function activate(
+  context: vscode.ExtensionContext,
+  foamPromise: Promise<Foam>
+) {
+  const isHoverEnabled: ConfigurationMonitor<boolean> =
+    monitorFoamVsCodeConfig(CONFIG_KEY);
 
-    const foam = await foamPromise;
+  const foam = await foamPromise;
 
-    context.subscriptions.push(
-      isHoverEnabled,
-      vscode.languages.registerHoverProvider(
-        mdDocSelector,
-        new HoverProvider(
-          isHoverEnabled,
-          foam.workspace,
-          foam.graph,
-          foam.services.parser
-        )
+  context.subscriptions.push(
+    isHoverEnabled,
+    vscode.languages.registerHoverProvider(
+      mdDocSelector,
+      new HoverProvider(
+        isHoverEnabled,
+        foam.workspace,
+        foam.graph,
+        foam.services.parser
       )
-    );
-  },
-};
+    )
+  );
+}
 
 export class HoverProvider implements vscode.HoverProvider {
   constructor(
@@ -86,7 +86,7 @@ export class HoverProvider implements vscode.HoverProvider {
     );
 
     const links = sources.slice(0, 10).map(ref => {
-      const command = OPEN_COMMAND.asURI(ref);
+      const command = commandAsURI(OPEN_COMMAND.forURI(ref));
       return `- [${this.workspace.get(ref).title}](${command.toString()})`;
     });
 
@@ -108,12 +108,29 @@ export class HoverProvider implements vscode.HoverProvider {
         : this.workspace.get(targetUri).title;
     }
 
+    const command = CREATE_NOTE_COMMAND.forPlaceholder(
+      Location.forObjectWithRange(documentUri, targetLink),
+      this.workspace.defaultExtension,
+      {
+        askForTemplate: true,
+        onFileExists: 'open',
+      }
+    );
+    const newNoteFromTemplate = new vscode.MarkdownString(
+      `[Create note from template for '${targetUri.getBasename()}'](${commandAsURI(
+        command
+      ).toString()})`
+    );
+    newNoteFromTemplate.isTrusted = true;
+
     const hover: vscode.Hover = {
-      contents: [mdContent, sources.length > 0 ? references : null],
+      contents: [
+        mdContent,
+        sources.length > 0 ? references : null,
+        targetUri.isPlaceholder() ? newNoteFromTemplate : null,
+      ],
       range: toVsCodeRange(targetLink.range),
     };
     return hover;
   }
 }
-
-export default feature;

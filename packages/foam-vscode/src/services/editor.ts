@@ -1,22 +1,79 @@
-import { URI } from '../core/model/uri';
-import { TextEncoder } from 'util';
+import { isEmpty } from 'lodash';
 import {
+  EndOfLine,
+  FileType,
+  RelativePattern,
   Selection,
   SnippetString,
   TextDocument,
+  TextEditor,
+  Uri,
   ViewColumn,
   window,
   workspace,
   WorkspaceEdit,
+  MarkdownString,
 } from 'vscode';
-import { focusNote } from '../utils';
+import { getExcerpt, stripFrontMatter, stripImages } from '../core/utils/md';
+import { isSome } from '../core/utils/core';
 import { fromVsCodeUri, toVsCodeUri } from '../utils/vsc-utils';
-import { isSome } from '../core/utils';
+import { asAbsoluteUri, URI } from '../core/model/uri';
+import { getFoamVsCodeConfig } from './config';
+import {
+  AlwaysIncludeMatcher,
+  FileListBasedMatcher,
+  GenericDataStore,
+  IDataStore,
+  IMatcher,
+} from '../core/services/datastore';
 
 interface SelectionInfo {
   document: TextDocument;
   selection: Selection;
   content: string;
+}
+
+/**
+ * Returns a MarkdownString of the note content
+ * @param note A Foam Note
+ */
+export function getNoteTooltip(content: string): string {
+  const strippedContent = stripFrontMatter(stripImages(content));
+  return formatMarkdownTooltip(strippedContent) as any;
+}
+
+export function formatMarkdownTooltip(content: string): MarkdownString {
+  const LINES_LIMIT = 16;
+  const { excerpt, lines } = getExcerpt(content, LINES_LIMIT);
+  const totalLines = content.split('\n').length;
+  const diffLines = totalLines - lines;
+  const ellipsis = diffLines > 0 ? `\n\n[...] *(+ ${diffLines} lines)*` : '';
+  const md = new MarkdownString(`${excerpt}${ellipsis}`);
+  md.isTrusted = true;
+  return md;
+}
+
+// Generate the document selector dynamically
+export const mdDocSelector = getFoamVsCodeConfig<string[]>(
+  'supportedLanguages',
+  ['markdown']
+).flatMap(lang => [
+  { language: lang, scheme: 'file' }, // Local files
+  { language: lang, scheme: 'vscode-vfs' }, // Remote files
+  { language: lang, scheme: 'untitled' }, // Untitled files
+]);
+
+// Check if the editor's document is a supported language
+export function isMdEditor(editor: TextEditor): boolean {
+  const supportedLanguages = getFoamVsCodeConfig<string[]>(
+    'supportedLanguages',
+    ['markdown']
+  );
+  return (
+    editor &&
+    editor.document &&
+    supportedLanguages.includes(editor.document.languageId)
+  );
 }
 
 export function findSelectionContent(): SelectionInfo | undefined {
@@ -37,6 +94,24 @@ export function findSelectionContent(): SelectionInfo | undefined {
     selection,
     content: document.getText(selection),
   };
+}
+
+export async function focusNote(
+  notePath: URI,
+  moveCursorToEnd: boolean,
+  viewColumn: ViewColumn = ViewColumn.Active
+) {
+  const document = await workspace.openTextDocument(toVsCodeUri(notePath));
+  const editor = await window.showTextDocument(document, viewColumn);
+
+  // Move the cursor to end of the file
+  if (moveCursorToEnd) {
+    const { lineCount } = editor.document;
+    const { range } = editor.document.lineAt(lineCount - 1);
+    editor.selection = new Selection(range.end, range.end);
+  }
+
+  return { document, editor };
 }
 
 export async function createDocAndFocus(
@@ -64,13 +139,20 @@ export async function replaceSelection(
 }
 
 /**
+ * Returns the EOL character for the currently open editor.
+ */
+export function getEditorEOL(): string {
+  return window.activeTextEditor.document.eol === EndOfLine.CRLF
+    ? '\r\n'
+    : '\n';
+}
+
+/**
  * Returns the directory of the file currently open in the editor.
- * If no file is open in the editor it will return the first folder
- * in the workspace.
- * If both aren't available it will throw.
+ * If no file is open in the editor it will throw.
  *
  * @returns URI
- * @throws Error if no file is open in editor AND no workspace folder defined
+ * @throws Error if no file is open in editor
  */
 export function getCurrentEditorDirectory(): URI {
   const uri = window.activeTextEditor?.document?.uri;
@@ -79,9 +161,95 @@ export function getCurrentEditorDirectory(): URI {
     return fromVsCodeUri(uri).getDirectory();
   }
 
-  if (workspace.workspaceFolders.length > 0) {
-    return fromVsCodeUri(workspace.workspaceFolders[0].uri);
+  throw new Error('No editor open');
+}
+
+export async function fileExists(uri: URI): Promise<boolean> {
+  try {
+    const stat = await workspace.fs.stat(toVsCodeUri(uri));
+    return stat.type === FileType.File;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function readFile(uri: URI): Promise<string | undefined> {
+  if (await fileExists(uri)) {
+    return workspace.fs
+      .readFile(toVsCodeUri(uri))
+      .then(bytes => bytes.toString());
+  }
+  return undefined;
+}
+
+export function deleteFile(uri: URI) {
+  return workspace.fs.delete(toVsCodeUri(uri), { recursive: true });
+}
+
+/**
+ * Turns a relative URI into an absolute URI for the given workspace.
+ * @param uriOrPath the uri or path to evaluate
+ * @returns an absolute uri
+ */
+export function asAbsoluteWorkspaceUri(uriOrPath: URI | string): URI {
+  if (workspace.workspaceFolders === undefined) {
+    throw new Error('An open folder or workspace is required');
+  }
+  const folders = workspace.workspaceFolders.map(folder =>
+    fromVsCodeUri(folder.uri)
+  );
+  const res = asAbsoluteUri(uriOrPath, folders);
+  return res;
+}
+
+export async function createMatcherAndDataStore(excludes: string[]): Promise<{
+  matcher: IMatcher;
+  dataStore: IDataStore;
+  excludePatterns: Map<string, string[]>;
+}> {
+  const excludePatterns = new Map<string, string[]>();
+  workspace.workspaceFolders.forEach(f => excludePatterns.set(f.name, []));
+
+  for (const exclude of excludes) {
+    const tokens = exclude.split('/');
+    const matchesFolder = workspace.workspaceFolders.find(
+      f => f.name === tokens[0]
+    );
+    if (matchesFolder) {
+      excludePatterns.get(tokens[0]).push(tokens.slice(1).join('/'));
+    } else {
+      for (const [, value] of excludePatterns.entries()) {
+        value.push(exclude);
+      }
+    }
   }
 
-  throw new Error('A file must be open in editor, or workspace folder needed');
+  const listFiles = async () => {
+    let files: Uri[] = [];
+    for (const folder of workspace.workspaceFolders) {
+      const uris = await workspace.findFiles(
+        new RelativePattern(folder.uri, '**/*'),
+        new RelativePattern(
+          folder.uri,
+          `{${excludePatterns.get(folder.name).join(',')}}`
+        )
+      );
+      files = [...files, ...uris];
+    }
+
+    return files.map(fromVsCodeUri);
+  };
+
+  const decoder = new TextDecoder('utf-8');
+  const readFile = async (uri: URI) => {
+    const content = await workspace.fs.readFile(toVsCodeUri(uri));
+    return decoder.decode(content);
+  };
+
+  const dataStore = new GenericDataStore(listFiles, readFile);
+  const matcher = isEmpty(excludes)
+    ? new AlwaysIncludeMatcher()
+    : await FileListBasedMatcher.createFromListFn(listFiles);
+
+  return { matcher, dataStore, excludePatterns };
 }

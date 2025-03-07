@@ -4,21 +4,374 @@ All notable changes to the "foam-vscode" extension will be documented in this fi
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.26.5] - 2025-02-21
+
+Fixes and Improvements:
+
+- Improved handling of virtual FS URIs (#1426)
+
+## [0.26.4] - 2024-11-12
+
+Fixes and Improvements:
+
+- Improved handling of virtual FS URIs (#1409)
+
+## [0.26.3] - 2024-11-12
+
+Fixes and Improvements:
+
+- Finetuned use of triemap (#1411 - thanks @pderaaij)
+
+## [0.26.2] - 2024-11-06
+
+Fixes and Improvements:
+
+- Performance improvements (#1406 - thanks @pderaaij)
+
+## [0.26.1] - 2024-10-09
+
+Fixes and Improvements:
+
+- Fixed issue with Buffer in web extension (#1401 - thanks @pderaaij)
+
+## [0.26.0] - 2024-10-01
+
+Features:
+
+- Foam is now a web extension! (#1395 - many thanks @pderaaij)
+
+## [0.25.12] - 2024-07-13
+
+Fixes and Improvements:
+
+- Improved YAML support (#1367)
+- Added convesion of wikilinks to markdown links (#1365 - thanks @hereistheusername)
+- Refactored util and settings code
+
+## [0.25.11] - 2024-03-18
+
+Fixes and Improvements:
+
+- Actually fixed bug in graph computation (#1345)
+
+## [0.25.10] - 2024-03-18
+
+Fixes and Improvements:
+
+- Fixed bug in graph computation (#1345)
+
+## [0.25.9] - 2024-03-17
+
+Fixes and Improvements:
+
+- Improved note creation from placeholder (#1344)
+
+## [0.25.8] - 2024-02-21
+
+Fixes and Improvements:
+
+- Upgraded dataformat to improve support for daily note naming (#1326 - thanks @rcyeh)
+
+## [0.25.7] - 2024-01-16
+
+Fixes and Improvements:
+
+- Modifies url encoding to target only the filename and skip spaces (#1322 - thanks @MABruni)
+- Minor tweak to quick action menu with suggestions for section name
+
+## [0.25.6] - 2023-12-13
+
+Fixes and Improvements:
+
+- Fixed wikilink definition encoding (#1311 - thanks @MABruni)
+
+## [0.25.5] - 2023-11-30
+
+Fixes and Improvements:
+
+- Using note title in preview (#1309)
+
+## [0.25.4] - 2023-09-19
+
+Fixes and Improvements:
+
+- Added support for linking sections within same document (#1289)
+- Fixed note embedding bug (#1286 - thanks @badsketch)
+
+## [0.25.3] - 2023-09-07
+
+Fixes and Improvements:
+
+- Fixed incorrect handling of embedding of non-existing notes (#1283 - thanks @badsketch)
+- Introduced Note Embedding Sytanx (#1281 - thanks @badsketch)
+- Attachments are not considered when computing orphan notes (#1242)
+
+## [0.25.2] - 2023-09-02
+
+Fixes and Improvements:
+
+- Added content-only embed styles (#1279 - thanks @badsketch)
+- Added expand-all button to tree views (#1276)
+
+## [0.25.1] - 2023-08-23
+
+Fixes and Improvements:
+
+- Added support for path parameter in filter (#1250)
+- Added grouping and filtering to tag explorer (#1275)
+- Added new setting to control note embedding (#1273 - thanks @badsketch)
+- Added last week's days to snippets (#1248 - thanks @jimgraham)
+
+Internal:
+
+- Updated jest to v29 (#1271 - thanks @nicholas-l)
+- Improved test cleanup and management (#1274)
+
+## [0.25.0] - 2023-06-30
+
+Features:
+
+- Support for multiple extensions and custom default extension (#1235)
+- Added `FOAM_TITLE_SAFE` template variable (#1232)
+
+Fixes and Improvements:
+
+- Connections panel tweaks (#1233)
+
+## [0.24.0] - 2023-05-19
+
+Features:
+
+- Converted backlinks panel into more general connections panel (#1230)
+
+Internal:
+
+- Improved janitor code (#1228)
+- Refactored code related to tree view panels (#1226)
+- Lint and cleanup (#1224)
+
+## [0.23.0] - 2023-05-06
+
+Features:
+
+- Added notes explorer (#1223)
+
+Fixes and Improvements:
+
+- Enabled tag completion in front matter (#1191 - thanks @jimgraham)
+- Various improvements to tree views (#1220)
+
+## [0.22.2] - 2023-04-20
+
+Fixes and Improvements:
+
+- Support to show placeholders only for open file in panel (#1201, #988)
+- Show note block in panels on hover preview (#1201, #800)
+- Show tag references within tag explorer (#1201)
+- Improved structure of view related commands (#1201)
+- Ignore `.foam` directory
+
+## [0.22.1] - 2023-04-15
+
+Fixes and Improvements:
+
+- Allow the `#` char to trigger tag autocompletion (#1192, #1189 - thanks @jimgraham)
+
+## [0.22.0] - 2023-04-15
+
+Fixes and Improvements:
+
+- Added support for deep tag hierarchy in Tag Explorer panel (#1134, #1194)
+- Consolidated and improved Backlinks, Placeholders and Orphans panels (#1196)
+- Fixed note resolution when using template without defined path (#1197)
+
+## [0.21.4] - 2023-04-14
+
+Fixes and Improvements:
+
+- Fixed issue with generated daily note template due to path escape (#1188, #1190)
+
+## [0.21.3] - 2023-04-12
+
+Fixes and Improvements:
+
+- Fixed relative path from workspace root in templates (#1188)
+
+## [0.21.2] - 2023-04-11
+
+Fixes and Improvements:
+
+- Fixed embed with relative paths (#1168, #1170)
+- Improved multi-root folder support for daily notes (#1126, #1175)
+- Improved use of tag completion (#1183 - thanks @jimgraham)
+- Fixed relative path use in note creation when using templates (#1170)
+
+Internal:
+
+- Sync user docs with foam-template docs (#1180 - thanks @infogulch)
+
+## [0.21.1] - 2023-02-24
+
+Fixes and Improvements:
+
+- Fixed note creation from placeholder (#1172)
+
+## [0.21.0] - 2023-02-16
+
+Features:
+
+- Added support for filters for the `foam-vscode.open-resource` command (#1161)
+
+## [0.20.8] - 2023-02-10
+
+Internal:
+
+- Updated most dependencies (#1160)
+
+## [0.20.7] - 2023-01-31
+
+Fixes and Improvements:
+
+- Inform the user that directory renaming is not supported (#1143)
+- Fixed extra `web` directory in published extension (#1152 - thanks @piousdeer)
+
+## [0.20.6] - 2023-01-21
+
+Fixes and Improvements:
+
+- Updated minimum VS Code version to 1.70.0 (#1140)
+- Fixed preview links with sections (#1135 - thanks @badsketch)
+- Added setting for creating new notes in root or current dir (#1142)
+
+## [0.20.5] - 2023-01-04
+
+Fixes and Improvements:
+
+- Fixed entry count in orphan, placeholder, tags-explorer panels (#1131 - thanks @badsketch)
+
+## [0.20.4] - 2023-01-04
+
+Fixes and Improvements:
+
+- Added support for emoji tags (#1125 - thanks @badsketch)
+
+## [0.20.3] - 2022-12-19
+
+Fixes and Improvements:
+
+- Show number of entries in title for orphan, placeholder, tag treeviews
+
+## [0.20.2] - 2022-10-26
+
+Fixes and Improvements:
+
+- Creating new note uses default template when none is provided (#1094)
+
+Internal:
+
+- Changed matcher implementation to remove dependency on micromatch/glob
+- Removed unnecessary dependencies and assets from extension
+
+## [0.20.1] - 2022-10-13
+
+Fixes and Improvements:
+
+- Improved support for daily notes in multi root workspace (#1073)
+- Create note from placeholder using template (#1061 - thanks @Dominic-DallOsto)
+- Improved support for globs in multi root workspace (#1083)
+
+## [0.20.0] - 2022-09-30
+
+Features:
+
+- Added `foam-vscode.create-note` command, which can be very customized for several use cases (#1076)
+
+Fixes and Improvements:
+
+- Removed `+` as a trigger char for date snippets
+- Improved attachment support (#915)
+- Improved error handling when starting Foam without an open workspace (#908)
+- Added support for opening non-text files via wikilink (#915)
+- Dataviz: now clicking is enough to open a link from the graph
+- Dataviz: clicking on images/attachments will open them
+
+## [0.19.5] - 2022-09-01
+
+Fixes and Improvements:
+
+- Added `FOAM_DATE_WEEK` variable (#1053 - Thanks @dmurph)
+- Fixed extension inclusion when generating references for attachments
+- Link completion label can be note title as well as path (#1059)
+- Images and attachments are not shown by default in graph view (#1056)
+
+## [0.19.4] - 2022-08-07
+
+Fixes and Improvements:
+
+- Fixed note embed in preview (#1052)
+
+## [0.19.3] - 2022-08-04
+
+Fixes and Improvements:
+
+- Image embeds fixed in preview (#1036)
+
+## [0.19.2] - 2022-08-04
+
+Fixes and Improvements:
+
+- Added support for angle markdown links (#1044)
+- Filter out invalid file name chars when creating note (#1042)
+
+Internal:
+
+- Reorganized docs (#1031, thanks @infogulch)
+- Fixed documentation links (#1046)
+- Preview code refactoring
+
+## [0.19.1] - 2022-07-11
+
+Internal:
+
+- Introduced cache for markdown parser (#1030)
+- Various code refactorings
+
+## [0.19.0] - 2022-07-07
+
+Features:
+
+- Support for attachments (PDF) and images (#1027)
+- Support for opening day notes for other days as well (#1026, thanks @alper)
+
+## [0.18.5] - 2022-06-29
+
+Fixes and Improvements:
+
+- Support for `alias` YAML property to define note alias (#1014 - thanks @lingyv-li)
+
+Internal:
+
+- Improved extension bundling (#1015 - thanks @lingyv-li)
+- Use `vscode.workspace.fs` instead of `fs` (#1005 - thanks @joshdover)
+
 ## [0.18.4] - 2022-06-03
 
 Fixes and Improvements:
+
 - move past `]]` when writing wikilinks (#998 - thanks @Lauviah0622)
 - highlight improvements (#890 - thanks @memeplex)
 
 ## [0.18.3] - 2022-04-17
 
 Fixes and Improvements:
+
 - Better reporting when links fail to resolve
 - Failing link resolution during graph computation no longer fatal
 
 ## [0.18.2] - 2022-04-14
 
 Fixes and Improvements:
+
 - Fixed parsing error on empty direct links (#980 - thanks @chrisUsick)
 - Improved rendering in preview of wikilinks that have link definitions (#979 - thanks @josephdecock)
 - Restored handling of section-only wikilinks (#981)
@@ -26,6 +379,7 @@ Fixes and Improvements:
 ## [0.18.1] - 2022-04-13
 
 Fixes and Improvements:
+
 - Fixed parsing error for direct links with square brackets in them (#977)
 - Improved markdown direct link resolution (#972)
 - Improved templates support for custom paths (#970)
@@ -33,14 +387,17 @@ Fixes and Improvements:
 ## [0.18.0] - 2022-04-11
 
 Features:
+
 - Link synchronization on file rename
 
 Internal:
+
 - Changed graph computation on workspace change to simplify code
 
 ## [0.17.8] - 2022-04-01
 
 Fixes and Improvements:
+
 - Do not add ignored files to Foam upon change (#480)
 - Restore full use of editor.action.openLink (#693)
 - Minor performance improvements
@@ -48,49 +405,58 @@ Fixes and Improvements:
 ## [0.17.7] - 2022-03-29
 
 Fixes and Improvements:
+
 - Include links with sections in backlinks (#895)
 - Improved navigation when document editor is already open
 
 ## [0.17.6] - 2022-03-03
 
 Fixes and Improvements:
+
 - Don't fail on error when scannig workspace (#943 - thanks @develmusa)
 
 ## [0.17.5] - 2022-02-22
 
 Fixes and Improvements:
+
 - Added FOAM_SLUG template variable (#865 - Thanks @techCarpenter)
 
 ## [0.17.4] - 2022-02-13
 
 Fixes and Improvements:
+
 - Improvements to Foam variables in templates (#882 - thanks @movermeyer)
   - Foam variables can now be used just any other VS Code variables, including in combination with placeholders and transformers
 
 ## [0.17.3] - 2022-01-14
 
 Fixes and Improvements:
+
 - Fixed autocompletion with tags (#885 - thanks @memeplex)
 - Improved "Open Daily Note" to be usabled in tasks (#897 - thanks @MCluck90)
 
 ## [0.17.2] - 2021-12-22
 
 Fixes and Improvements:
+
 - Improved support for wikilinks in titles (#878)
 - Use syntax injection for wikilinks (#876 - thanks @memeplex)
-- Fix when applying text edits in last line 
+- Fix when applying text edits in last line
 
 Internal:
+
 - DX: Clean up of testing setup (#881 - thanks @memeplex)
 
 ## [0.17.1] - 2021-12-16
 
 Fixes and Improvements:
+
 - Decorate markdown files only (#857)
 - Fix template placeholders issue (#859)
 - Improved replacement range for link completion
 
 Internal:
+
 - Major URI/path handling refactoring (#858 - thanks @memeplex)
 
 ## [0.17.0] - 2021-12-08
@@ -145,7 +511,6 @@ Fixes and Improvements:
 
 - Link Reference Generation is now OFF by default
 - Fixed preview navigation (#830)
-
 
 ## [0.15.5] - 2021-11-15
 
@@ -453,7 +818,7 @@ Fixes and Improvements:
 
 ## [0.7.1] - 2020-11-27
 
-New Feature:
+Features:
 
 - Foam logging can now be inspected in VsCode Output panel (#377)
 
@@ -465,7 +830,7 @@ Fixes and Improvements:
 
 ## [0.7.0] - 2020-11-25
 
-New Features:
+Features:
 
 - Foam stays in sync with changes in notes
 - Dataviz: Added multiple selection in graph (shift+click on node)
@@ -477,7 +842,7 @@ Fixes and Improvements:
 
 ## [0.6.0] - 2020-11-19
 
-New features:
+Features:
 
 - Added command to create notes from templates (#115 - Thanks @ingalless)
 
@@ -492,7 +857,7 @@ Fixes and Improvements:
 
 ## [0.5.0] - 2020-11-09
 
-New features:
+Features:
 
 - Added tags panel (#311)
 
@@ -506,7 +871,7 @@ Fixes and Improvements:
 
 ## [0.4.0] - 2020-10-28
 
-New features:
+Features:
 
 - Added `Foam: Show Graph` command
 - Added date snippets (/+1d, ...) to create wikilinks to dates in daily note format
@@ -534,7 +899,7 @@ Fixes and improvements:
 
 ## [0.3.0] - 2020-07-25
 
-New features:
+Features:
 
 - [Daily Notes](https://foambubble.github.io/foam/daily-notes)
 - [Janitor](https://foambubble.github.io/foam/workspace-janitor) for updating headings and link references across your workspace

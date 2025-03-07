@@ -14,7 +14,7 @@ Logger.setLevel('error');
 
 export const cleanWorkspace = async () => {
   const files = await vscode.workspace.findFiles('**', '{.vscode,.keep}');
-  await Promise.all(files.map(f => vscode.workspace.fs.delete(f)));
+  await Promise.all(files.map(f => deleteFile(fromVsCodeUri(f))));
 };
 
 export const showInEditor = async (uri: URI) => {
@@ -28,9 +28,15 @@ export const closeEditors = async () => {
   await wait(100);
 };
 
-export const deleteFile = (file: URI | { uri: URI }) => {
+export const deleteFile = async (file: URI | { uri: URI }) => {
   const uri = 'uri' in file ? file.uri : file;
-  return vscode.workspace.fs.delete(toVsCodeUri(uri), { recursive: true });
+  try {
+    await vscode.workspace.fs.delete(toVsCodeUri(uri), {
+      recursive: true,
+    });
+  } catch (e) {
+    // ignore
+  }
 };
 
 /**
@@ -87,5 +93,52 @@ export const createNote = (r: Resource) => {
   return vscode.workspace.fs.writeFile(
     toVsCodeUri(r.uri),
     new TextEncoder().encode(content)
+  );
+};
+
+export const runCommand = async <T>(command: string, args: T = undefined) =>
+  vscode.commands.executeCommand(command, args);
+
+/**
+ * Runs a function with a modified configuration and
+ * restores the original configuration afterwards
+ *
+ * @param key the key of the configuration to modify
+ * @param value the value to set the configuration to
+ * @param fn the function to execute
+ */
+export const withModifiedConfiguration = async (key, value, fn: () => void) => {
+  const old = vscode.workspace.getConfiguration().inspect(key);
+  await vscode.workspace.getConfiguration().update(key, value);
+  await fn();
+  await vscode.workspace.getConfiguration().update(key, old.workspaceValue);
+};
+
+/**
+ * Runs a function with a modified Foam configuration and
+ * restores the original configuration afterwards
+ *
+ * @param key the key of the Foam configuration to modify
+ * @param value the value to set the configuration to
+ * @param fn the function to execute
+ */
+export const withModifiedFoamConfiguration = (key, value, fn: () => void) =>
+  withModifiedConfiguration(`foam.${key}`, value, fn);
+
+/**
+ * Utility function to check if two URIs are the same.
+ * It has the goal of supporting Uri and URI, and dealing with
+ * inconsistencies in the way they are represented (especially the
+ * drive letter in Windows)
+ *
+ * @param actual the actual value
+ * @param expected the expected value
+ */
+export const expectSameUri = (
+  actual: vscode.Uri | URI,
+  expected: vscode.Uri | URI
+) => {
+  expect(actual.path.toLocaleLowerCase()).toEqual(
+    expected.path.toLocaleLowerCase()
   );
 };

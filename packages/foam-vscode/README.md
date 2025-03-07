@@ -1,8 +1,8 @@
 # Foam for VSCode
 
-[![Version](https://vsmarketplacebadge.apphb.com/version/foam.foam-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
+[![Version](https://img.shields.io/visual-studio-marketplace/v/foam.foam-vscode)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
 [![Downloads](https://img.shields.io/visual-studio-marketplace/d/foam.foam-vscode)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/foam.foam-vscode)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/foam.foam-vscode?label=VS%20Code%20Installs)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
 [![Ratings](https://img.shields.io/visual-studio-marketplace/r/foam.foam-vscode)](https://marketplace.visualstudio.com/items?itemName=foam.foam-vscode)
 
 > You can join the Foam Community on the [Foam Discord](https://foambubble.github.io/join-discord/e)
@@ -17,7 +17,7 @@ Foam is also meant to be extensible, so you can integrate with its internals to 
 
 ### Graph Visualization
 
-See how your notes are connected via a [graph](https://foambubble.github.io/foam/features/graph-visualisation) with the `Foam: Show Graph` command.
+See how your notes are connected via a [graph](https://foambubble.github.io/foam/user/features/graph-visualization) with the `Foam: Show Graph` command.
 
 ![Graph Visualization](./assets/screenshots/feature-show-graph.gif)
 
@@ -75,7 +75,7 @@ Foam supports link aliasing, so you can have a `[[wikilink]]`, or a `[[wikilink|
 
 ### Templates
 
-Use [custom templates](https://foambubble.github.io/foam/features/note-templates) to have avoid repetitve work on your notes.
+Use [custom templates](https://foambubble.github.io/foam/user/features/note-templates) to have avoid repetitve work on your notes.
 
 ![Templates](./assets/screenshots/feature-templates.gif)
 
@@ -88,14 +88,14 @@ See for each occurrence the context in which it lives, as well as a preview of t
 
 ### Tag Explorer Panel
 
-Tag your notes and navigate them with the [Tag Explorer](https://foambubble.github.io/foam/features/tags).
+Tag your notes and navigate them with the [Tag Explorer](https://foambubble.github.io/foam/user/features/tags).
 Foam also supports hierarchical tags.
 
 ![Tag Explorer Panel](./assets/screenshots/feature-tags-panel.gif)
 
 ### Orphans and Placeholder Panels
 
-Orphans are note that have no inbound nor outbound links. 
+Orphans are note that have no inbound nor outbound links.
 Placeholders are dangling links, or notes without content.
 Keep them under control, and your knowledge base in better state, by using this panel.
 
@@ -109,13 +109,13 @@ Foam highlights wikilinks and placeholder differently, to help you visualize you
 
 ### Daily note
 
-Create a journal with [daily notes](https://foambubble.github.io/foam/features/daily-notes).
+Create a journal with [daily notes](https://foambubble.github.io/foam/user/features/daily-notes).
 
 ![Daily Note](./assets/screenshots/feature-daily-note.gif)
 
 ### Generate references for your wikilinks
 
-Create markdown [references](https://foambubble.github.io/foam/features/link-reference-definitions) for `[[wikilinks]]`, to use your notes in a non-Foam workspace.
+Create markdown [references](https://foambubble.github.io/foam/user/features/link-reference-definitions) for `[[wikilinks]]`, to use your notes in a non-Foam workspace.
 With references you can also make your notes navigable both in GitHub UI as well as GitHub Pages.
 
 ![Generate references](./assets/screenshots/feature-definitions-generation.gif)
@@ -125,12 +125,12 @@ With references you can also make your notes navigable both in GitHub UI as well
 - Explore your knowledge base with the `Foam: Open Random Note` command
 - Access your daily note with the `Foam: Open Daily Note` command
 - Create a new note with the `Foam: Create New Note` command
-  - This becomes very powerful when combined with [note templates](https://foambubble.github.io/foam/features/note-templates) and the `Foam: Create New Note from Template` command
+  - This becomes very powerful when combined with [note templates](https://foambubble.github.io/foam/user/features/note-templates) and the `Foam: Create New Note from Template` command
 - See your workspace as a connected graph with the `Foam: Show Graph` command
 
 ## Recipes
 
-People use Foam in different ways for different use cases, check out the [recipes](https://foambubble.github.io/foam/recipes/recipes) page for inspiration!
+People use Foam in different ways for different use cases, check out the [recipes](https://foambubble.github.io/foam/user/recipes/recipes) page for inspiration!
 
 ## Getting started
 

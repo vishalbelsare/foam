@@ -6,14 +6,13 @@ import wikiLinkPlugin from 'remark-wiki-link';
 import frontmatterPlugin from 'remark-frontmatter';
 import { parse as parseYAML } from 'yaml';
 import visit from 'unist-util-visit';
-import detectNewline from 'detect-newline';
-import os from 'os';
 import { NoteLinkDefinition, Resource, ResourceParser } from '../model/note';
 import { Position } from '../model/position';
 import { Range } from '../model/range';
-import { extractHashtags, extractTagsFromProp, isSome } from '../utils';
+import { extractHashtags, extractTagsFromProp, hash, isSome } from '../utils';
 import { Logger } from '../utils/log';
 import { URI } from '../model/uri';
+import { ICache } from '../utils/cache';
 
 export interface ParserPlugin {
   name?: string;
@@ -25,21 +24,38 @@ export interface ParserPlugin {
   onDidFindProperties?: (properties: any, note: Resource, node: Node) => void;
 }
 
-const ALIAS_DIVIDER_CHAR = '|';
+type Checksum = string;
+
+export interface ParserCacheEntry {
+  checksum: Checksum;
+  resource: Resource;
+}
+
+/**
+ * This caches the parsed markdown for a given URI.
+ *
+ * The URI identifies the resource that needs to be parsed,
+ * the checksum identifies the text that needs to be parsed.
+ *
+ * If the URI and the Checksum have not changed, the cached resource is returned.
+ */
+export type ParserCache = ICache<URI, ParserCacheEntry>;
 
 export function createMarkdownParser(
-  extraPlugins: ParserPlugin[]
+  extraPlugins: ParserPlugin[] = [],
+  cache?: ParserCache
 ): ResourceParser {
   const parser = unified()
     .use(markdownParse, { gfm: true })
     .use(frontmatterPlugin, ['yaml'])
-    .use(wikiLinkPlugin, { aliasDivider: ALIAS_DIVIDER_CHAR });
+    .use(wikiLinkPlugin, { aliasDivider: '|' });
 
   const plugins = [
     titlePlugin,
     wikilinkPlugin,
     definitionsPlugin,
     tagsPlugin,
+    aliasesPlugin,
     sectionsPlugin,
     ...extraPlugins,
   ];
@@ -63,7 +79,6 @@ export function createMarkdownParser(
         }
       }
       const tree = parser.parse(markdown);
-      const eol = detectNewline(markdown) || os.EOL;
 
       const note: Resource = {
         uri: uri,
@@ -72,14 +87,9 @@ export function createMarkdownParser(
         title: '',
         sections: [],
         tags: [],
+        aliases: [],
         links: [],
         definitions: [],
-        source: {
-          text: markdown,
-          contentStart: astPointToFoamPosition(tree.position!.start),
-          end: astPointToFoamPosition(tree.position!.end),
-          eol: eol,
-        },
       };
 
       for (const plugin of plugins) {
@@ -97,12 +107,6 @@ export function createMarkdownParser(
               ...note.properties,
               ...yamlProperties,
             };
-            // Update the start position of the note by exluding the metadata
-            note.source.contentStart = Position.create(
-              node.position!.end.line! + 2,
-              0
-            );
-
             for (const plugin of plugins) {
               try {
                 plugin.onDidFindProperties?.(yamlProperties, note, node);
@@ -134,7 +138,23 @@ export function createMarkdownParser(
       return note;
     },
   };
-  return foamParser;
+
+  const cachedParser: ResourceParser = {
+    parse: (uri: URI, markdown: string): Resource => {
+      const actualChecksum = hash(markdown);
+      if (cache.has(uri)) {
+        const { checksum, resource } = cache.get(uri);
+        if (actualChecksum === checksum) {
+          return resource;
+        }
+      }
+      const resource = foamParser.parse(uri, markdown);
+      cache.set(uri, { checksum: actualChecksum, resource });
+      return resource;
+    },
+  };
+
+  return isSome(cache) ? cachedParser : foamParser;
 }
 
 /**
@@ -217,8 +237,11 @@ const sectionsPlugin: ParserPlugin = {
     }
   },
   onDidVisitTree: (tree, note) => {
-    const end = Position.create(note.source.end.line + 1, 0);
-    // Close all the remainig sections
+    const end = Position.create(
+      astPointToFoamPosition(tree.position.end).line + 1,
+      0
+    );
+    // Close all the remaining sections
     while (sectionStack.length > 0) {
       const section = sectionStack.pop();
       note.sections.push({
@@ -245,7 +268,7 @@ const titlePlugin: ParserPlugin = {
     }
   },
   onDidFindProperties: (props, note) => {
-    // Give precendence to the title from the frontmatter if it exists
+    // Give precedence to the title from the frontmatter if it exists
     note.title = props.title?.toString() ?? note.title;
   },
   onDidVisitTree: (tree, note) => {
@@ -255,22 +278,54 @@ const titlePlugin: ParserPlugin = {
   },
 };
 
+const aliasesPlugin: ParserPlugin = {
+  name: 'aliases',
+  onDidFindProperties: (props, note, node) => {
+    if (isSome(props.alias)) {
+      const aliases = Array.isArray(props.alias)
+        ? props.alias
+        : props.alias.split(',').map(m => m.trim());
+      for (const alias of aliases) {
+        note.aliases.push({
+          title: alias,
+          range: astPositionToFoamRange(node.position!),
+        });
+      }
+    }
+  },
+};
+
 const wikilinkPlugin: ParserPlugin = {
   name: 'wikilink',
   visit: (node, note, noteSource) => {
     if (node.type === 'wikiLink') {
+      const isEmbed =
+        noteSource.charAt(node.position!.start.offset - 1) === '!';
+
       const literalContent = noteSource.substring(
-        node.position!.start.offset!,
+        isEmbed
+          ? node.position!.start.offset! - 1
+          : node.position!.start.offset!,
         node.position!.end.offset!
       );
+
+      const range = isEmbed
+        ? Range.create(
+            node.position.start.line - 1,
+            node.position.start.column - 2,
+            node.position.end.line - 1,
+            node.position.end.column - 1
+          )
+        : astPositionToFoamRange(node.position!);
 
       note.links.push({
         type: 'wikilink',
         rawText: literalContent,
-        range: astPositionToFoamRange(node.position!),
+        range,
+        isEmbed,
       });
     }
-    if (node.type === 'link') {
+    if (node.type === 'link' || node.type === 'image') {
       const targetUri = (node as any).url;
       const uri = note.uri.resolve(targetUri);
       if (uri.scheme !== 'file' || uri.path === note.uri.path) {
@@ -284,6 +339,7 @@ const wikilinkPlugin: ParserPlugin = {
         type: 'link',
         rawText: literalContent,
         range: astPositionToFoamRange(node.position!),
+        isEmbed: literalContent.startsWith('!'),
       });
     }
   },
@@ -302,7 +358,8 @@ const definitionsPlugin: ParserPlugin = {
     }
   },
   onDidVisitTree: (tree, note) => {
-    note.definitions = getFoamDefinitions(note.definitions, note.source.end);
+    const end = astPointToFoamPosition(tree.position.end);
+    note.definitions = getFoamDefinitions(note.definitions, end);
   },
 };
 
@@ -367,3 +424,46 @@ const astPositionToFoamRange = (pos: AstPosition): Range =>
     pos.end.line - 1,
     pos.end.column - 1
   );
+
+const blockParser = unified().use(markdownParse, { gfm: true });
+export const getBlockFor = (
+  markdown: string,
+  line: number | Position
+): { block: string; nLines: number } => {
+  const searchLine = typeof line === 'number' ? line : line.line;
+  const tree = blockParser.parse(markdown);
+  const lines = markdown.split('\n');
+  let startLine = -1;
+  let endLine = -1;
+
+  // For list items, we also include the sub-lists
+  visit(tree, ['listItem'], (node: any) => {
+    if (node.position.start.line === searchLine + 1) {
+      startLine = node.position.start.line - 1;
+      endLine = node.position.end.line;
+      return visit.EXIT;
+    }
+  });
+
+  // For headings, we also include the sub-sections
+  let headingLevel = -1;
+  visit(tree, ['heading'], (node: any) => {
+    if (startLine > -1 && node.depth <= headingLevel) {
+      endLine = node.position.start.line - 1;
+      return visit.EXIT;
+    }
+    if (node.position.start.line === searchLine + 1) {
+      headingLevel = node.depth;
+      startLine = node.position.start.line - 1;
+      endLine = lines.length - 1; // in case it's the last section
+    }
+  });
+
+  let nLines = startLine === -1 ? 1 : endLine - startLine;
+  let block =
+    startLine === -1
+      ? lines[searchLine] ?? ''
+      : lines.slice(startLine, endLine).join('\n');
+
+  return { block, nLines };
+};

@@ -51,10 +51,7 @@ describe('Link resolution', () => {
       );
       const noteB = createNoteFromMarkdown('Page b', '/path/one/page b.md');
       const noteB2 = createNoteFromMarkdown('Page b 2', '/path/two/page b.md');
-      workspace
-        .set(noteA)
-        .set(noteB)
-        .set(noteB2);
+      workspace.set(noteA).set(noteB).set(noteB2);
       expect(workspace.resolveLink(noteA, noteA.links[0])).toEqual(noteB2.uri);
     });
 
@@ -63,10 +60,7 @@ describe('Link resolution', () => {
       const noteA = createNoteFromMarkdown('Link to [[page b]]', '/page-a.md');
       const noteB = createNoteFromMarkdown('Page b', '/path/one/page b.md');
       const noteB2 = createNoteFromMarkdown('Page b2', '/path/two/page b.md');
-      workspace
-        .set(noteA)
-        .set(noteB)
-        .set(noteB2);
+      workspace.set(noteA).set(noteB).set(noteB2);
       expect(workspace.resolveLink(noteA, noteA.links[0])).toEqual(noteB.uri);
     });
 
@@ -80,10 +74,7 @@ describe('Link resolution', () => {
       const noteB3 = createTestNote({ uri: '/path/to/yet/page-b.md' });
 
       const ws = createTestWorkspace();
-      ws.set(noteA)
-        .set(noteB1)
-        .set(noteB2)
-        .set(noteB3);
+      ws.set(noteA).set(noteB1).set(noteB2).set(noteB3);
 
       expect(ws.resolveLink(noteA, noteA.links[0])).toEqual(noteB2.uri);
       expect(ws.resolveLink(noteA, noteA.links[1])).toEqual(noteB3.uri);
@@ -97,10 +88,7 @@ describe('Link resolution', () => {
       );
       const noteB = createNoteFromMarkdown('Page b', '/path/one/page b.md');
       const noteB2 = createNoteFromMarkdown('Page b2', '/path/two/page b.md');
-      workspace
-        .set(noteA)
-        .set(noteB)
-        .set(noteB2);
+      workspace.set(noteA).set(noteB).set(noteB2);
       expect(workspace.resolveLink(noteA, noteA.links[0])).toEqual(noteB2.uri);
       expect(workspace.resolveLink(noteA, noteA.links[1])).toEqual(noteB.uri);
     });
@@ -157,12 +145,10 @@ describe('Link resolution', () => {
         ],
       });
       const noteB = createTestNote({ uri: '/somewhere/PAGE-B.md' });
-      const ws = createTestWorkspace()
-        .set(noteA)
-        .set(noteB);
+      const ws = createTestWorkspace().set(noteA).set(noteB);
 
       expect(ws.resolveLink(noteA, noteA.links[0])).toEqual(
-        noteB.uri.withFragment('section')
+        noteB.uri.with({ fragment: 'section' })
       );
     });
 
@@ -177,8 +163,67 @@ describe('Link resolution', () => {
       const ws = createTestWorkspace().set(noteA);
 
       expect(ws.resolveLink(noteA, noteA.links[0])).toEqual(
-        noteA.uri.withFragment('section')
+        noteA.uri.with({ fragment: 'section' })
       );
+    });
+
+    it('should resolve wikilinks with special characters', () => {
+      const ws = createTestWorkspace();
+      const noteA = createNoteFromMarkdown(
+        `Link to [[page: a]] and [[page %b%]] and [[page? c]] and [[[page] d]] and
+         [[page ^e^]] and [[page \`f\`]] and [[page {g}]] and [[page ~i]] and
+         [[page /j]]`
+      );
+      const noteB = createNoteFromMarkdown(
+        'Note containing :',
+        '/dir1/page: a.md'
+      );
+      const noteC = createNoteFromMarkdown(
+        'Note containing %',
+        '/dir1/page %b%.md'
+      );
+      const noteD = createNoteFromMarkdown(
+        'Note containing ?',
+        '/dir1/page? c.md'
+      );
+      const noteE = createNoteFromMarkdown(
+        'Note containing ]',
+        '/dir1/[page] d.md'
+      );
+      const noteF = createNoteFromMarkdown(
+        'Note containing ^',
+        '/dir1/page ^e^.md'
+      );
+      const noteG = createNoteFromMarkdown(
+        'Note containing `',
+        '/dir1/page `f`.md'
+      );
+      const noteH = createNoteFromMarkdown(
+        'Note containing { and }',
+        '/dir1/page {g}.md'
+      );
+      const noteI = createNoteFromMarkdown(
+        'Note containing ~',
+        '/dir1/page ~i.md'
+      );
+      ws.set(noteA)
+        .set(noteB)
+        .set(noteC)
+        .set(noteD)
+        .set(noteE)
+        .set(noteF)
+        .set(noteG)
+        .set(noteH)
+        .set(noteI);
+
+      expect(ws.resolveLink(noteA, noteA.links[0])).toEqual(noteB.uri);
+      expect(ws.resolveLink(noteA, noteA.links[1])).toEqual(noteC.uri);
+      expect(ws.resolveLink(noteA, noteA.links[2])).toEqual(noteD.uri);
+      expect(ws.resolveLink(noteA, noteA.links[3])).toEqual(noteE.uri);
+      expect(ws.resolveLink(noteA, noteA.links[4])).toEqual(noteF.uri);
+      expect(ws.resolveLink(noteA, noteA.links[5])).toEqual(noteG.uri);
+      expect(ws.resolveLink(noteA, noteA.links[6])).toEqual(noteH.uri);
+      expect(ws.resolveLink(noteA, noteA.links[7])).toEqual(noteI.uri);
     });
   });
 
@@ -238,6 +283,32 @@ describe('Link resolution', () => {
       ws.set(noteA).set(noteB);
       expect(ws.resolveLink(noteA, noteA.links[0])).toEqual(noteB.uri);
     });
+
+    it('should support angle syntax #1039', () => {
+      const noteA = createNoteFromMarkdown(
+        'Content of note a',
+        '/path/to/note a.md'
+      );
+      const noteB = createNoteFromMarkdown(
+        'Link to [note](<./note a.md>)',
+        '/path/to/note b.md'
+      );
+      const noteC = createNoteFromMarkdown(
+        'Link to [note](./note%20a.md)',
+        '/path/to/note c.md'
+      );
+      const noteD = createNoteFromMarkdown(
+        'Link to [note](./note a.md)',
+        '/path/to/note d.md'
+      );
+
+      const ws = createTestWorkspace();
+      ws.set(noteA).set(noteB).set(noteC).set(noteD);
+
+      expect(ws.resolveLink(noteB, noteB.links[0])).toEqual(noteA.uri);
+      expect(ws.resolveLink(noteC, noteC.links[0])).toEqual(noteA.uri);
+      expect(noteD.links).toEqual([]);
+    });
   });
 });
 
@@ -272,6 +343,21 @@ describe('Generation of markdown references', () => {
     expect(references.map(r => r.url)).toEqual(['page-b.md', 'page-c.md']);
   });
 
+  it('should always add extensions for attachments, even when includeExtension = false', () => {
+    const workspace = createTestWorkspace();
+    const noteA = createNoteFromMarkdown(
+      'Link to [[page-b]] and [[image.png]]',
+      '/dir1/page-a.md'
+    );
+    workspace
+      .set(noteA)
+      .set(createNoteFromMarkdown('Content of note B', '/dir1/page-b.md'))
+      .set(createNoteFromMarkdown('', '/dir1/image.png'));
+
+    const references = createMarkdownReferences(workspace, noteA.uri, false);
+    expect(references.map(r => r.url)).toEqual(['page-b', 'image.png']);
+  });
+
   it('should use relative paths', () => {
     const workspace = createTestWorkspace();
     const noteA = createNoteFromMarkdown(
@@ -284,9 +370,78 @@ describe('Generation of markdown references', () => {
       .set(createNoteFromMarkdown('Content of note C', '/dir3/page-c.md'));
 
     const references = createMarkdownReferences(workspace, noteA.uri, true);
-    expect(references.map(r => r.url)).toEqual([
+    expect(references.map(r => decodeURIComponent(r.url))).toEqual([
       '../dir2/page-b.md',
       '../dir3/page-c.md',
+    ]);
+  });
+
+  it('should generate links for embedded notes that are formatted properly', () => {
+    const workspace = createTestWorkspace();
+    const noteA = createNoteFromMarkdown(
+      'Link to ![[page-b]] and [[page-c]]',
+      '/dir1/page-a.md'
+    );
+    workspace
+      .set(noteA)
+      .set(createNoteFromMarkdown('Content of note B', '/dir2/page-b.md'))
+      .set(createNoteFromMarkdown('Content of note C', '/dir3/page-c.md'));
+
+    const references = createMarkdownReferences(workspace, noteA.uri, true);
+    expect(references.map(r => [decodeURIComponent(r.url), r.label])).toEqual([
+      ['../dir2/page-b.md', 'page-b'],
+      ['../dir3/page-c.md', 'page-c'],
+    ]);
+  });
+
+  it('should not generate links for placeholders', () => {
+    const workspace = createTestWorkspace();
+    const noteA = createNoteFromMarkdown(
+      'Link to ![[page-b]] and [[page-c]] and [[does-not-exist]] and ![[does-not-exist-either]]',
+      '/dir1/page-a.md'
+    );
+    workspace
+      .set(noteA)
+      .set(createNoteFromMarkdown('Content of note B', '/dir2/page-b.md'))
+      .set(createNoteFromMarkdown('Content of note C', '/dir3/page-c.md'));
+
+    const references = createMarkdownReferences(workspace, noteA.uri, true);
+    expect(references.map(r => decodeURIComponent(r.url))).toEqual([
+      '../dir2/page-b.md',
+      '../dir3/page-c.md',
+    ]);
+  });
+
+  it('should encode special characters in links', () => {
+    const workspace = createTestWorkspace();
+    const noteA = createNoteFromMarkdown(
+      `Link to [[page: a]] and [[page %b%]] and [[page? c]] and [[[page] d]] and
+       [[page ^e^]] and [[page \`f\`]] and [[page {g}]] and [[page ~i]] and
+       [[page /j]]`
+    );
+    workspace
+      .set(noteA)
+      .set(createNoteFromMarkdown('Note containing :', '/dir1/page: a.md'))
+      .set(createNoteFromMarkdown('Note containing %', '/dir1/page %b%.md'))
+      .set(createNoteFromMarkdown('Note containing ?', '/dir1/page? c.md'))
+      .set(createNoteFromMarkdown('Note containing ]', '/dir1/[page] d.md'))
+      .set(createNoteFromMarkdown('Note containing ^', '/dir1/page ^e^.md'))
+      .set(createNoteFromMarkdown('Note containing `', '/dir1/page `f`.md'))
+      .set(
+        createNoteFromMarkdown('Note containing { and }', '/dir1/page {g}.md')
+      )
+      .set(createNoteFromMarkdown('Note containing ~', '/dir1/page ~i.md'));
+
+    const references = createMarkdownReferences(workspace, noteA.uri, true);
+    expect(references.map(r => decodeURIComponent(r.url))).toEqual([
+      '../dir1/page: a.md',
+      '../dir1/page %b%.md',
+      '../dir1/page? c.md',
+      '../dir1/[page] d.md',
+      '../dir1/page ^e^.md',
+      '../dir1/page `f`.md',
+      '../dir1/page {g}.md',
+      '../dir1/page ~i.md',
     ]);
   });
 });

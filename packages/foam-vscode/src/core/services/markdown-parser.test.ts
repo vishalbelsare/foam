@@ -1,8 +1,13 @@
-import { createMarkdownParser, ParserPlugin } from './markdown-parser';
+import {
+  createMarkdownParser,
+  getBlockFor,
+  ParserPlugin,
+} from './markdown-parser';
 import { Logger } from '../utils/log';
 import { URI } from '../model/uri';
 import { Range } from '../model/range';
 import { getRandomURI } from '../../test/test-utils';
+import { Position } from '../model/position';
 
 Logger.setLevel('error');
 
@@ -39,6 +44,7 @@ describe('Markdown parsing', () => {
       const link = note.links[0];
       expect(link.type).toEqual('link');
       expect(link.rawText).toEqual('[link to page b](../doc/page-b.md)');
+      expect(link.isEmbed).toBeFalsy();
     });
 
     it('should detect links that have formatting in label', () => {
@@ -48,6 +54,15 @@ describe('Markdown parsing', () => {
       expect(note.links.length).toEqual(1);
       const link = note.links[0];
       expect(link.type).toEqual('link');
+      expect(link.isEmbed).toBeFalsy();
+    });
+
+    it('should detect embed links', () => {
+      const note = createNoteFromMarkdown('this is ![link](../doc/page-b.md)');
+      expect(note.links.length).toEqual(1);
+      const link = note.links[0];
+      expect(link.type).toEqual('link');
+      expect(link.isEmbed).toBeTruthy();
     });
 
     it('should detect wikilinks', () => {
@@ -61,6 +76,16 @@ describe('Markdown parsing', () => {
       link = note.links[1];
       expect(link.type).toEqual('wikilink');
       expect(link.rawText).toEqual('[[a file]]');
+      expect(link.isEmbed).toBeFalsy();
+    });
+
+    it('should detect wikilink embeds', () => {
+      const note = createNoteFromMarkdown('Some content and ![[an embed]]');
+      expect(note.links.length).toEqual(1);
+      const link = note.links[0];
+      expect(link.type).toEqual('wikilink');
+      expect(link.rawText).toEqual('![[an embed]]');
+      expect(link.isEmbed).toBeTruthy();
     });
 
     it('should detect wikilinks that have aliases', () => {
@@ -74,6 +99,7 @@ describe('Markdown parsing', () => {
       link = note.links[1];
       expect(link.type).toEqual('wikilink');
       expect(link.rawText).toEqual('[[other link | spaced]]');
+      expect(link.isEmbed).toBeFalsy();
     });
 
     it('should skip wikilinks in codeblocks', () => {
@@ -379,5 +405,180 @@ and some content`
       );
       expect(note2.properties.hasHeading).toBeTruthy();
     });
+  });
+  describe('Alias', () => {
+    it('can find tags in comma separated string', () => {
+      const note = parser.parse(
+        URI.file('/path/to/a'),
+        `
+---
+alias: alias 1, alias 2   , alias3 
+---
+This is a test note without headings.
+But with some content.
+`
+      );
+      expect(note.aliases).toEqual([
+        {
+          range: Range.create(1, 0, 3, 3),
+          title: 'alias 1',
+        },
+        {
+          range: Range.create(1, 0, 3, 3),
+          title: 'alias 2',
+        },
+        {
+          range: Range.create(1, 0, 3, 3),
+          title: 'alias3',
+        },
+      ]);
+    });
+  });
+  it('can find tags in yaml array', () => {
+    const note = parser.parse(
+      URI.file('/path/to/a'),
+      `
+---
+alias:
+- alias 1
+- alias 2
+- alias3
+---
+This is a test note without headings.
+But with some content.
+`
+    );
+    expect(note.aliases).toEqual([
+      {
+        range: Range.create(1, 0, 6, 3),
+        title: 'alias 1',
+      },
+      {
+        range: Range.create(1, 0, 6, 3),
+        title: 'alias 2',
+      },
+      {
+        range: Range.create(1, 0, 6, 3),
+        title: 'alias3',
+      },
+    ]);
+  });
+});
+
+describe('Block detection for lists', () => {
+  const md = `
+- this is block 1
+- this is [[block]] 2
+  - this is block 2.1
+- this is block 3
+  - this is block 3.1
+    - this is block 3.1.1
+  - this is block 3.2
+- this is block 4
+this is a simple line
+this is another simple line
+  `;
+
+  it('can detect block', () => {
+    const { block } = getBlockFor(md, 1);
+    expect(block).toEqual('- this is block 1');
+  });
+
+  it('supports nested blocks 1', () => {
+    const { block } = getBlockFor(md, 2);
+    expect(block).toEqual(`- this is [[block]] 2
+  - this is block 2.1`);
+  });
+
+  it('supports nested blocks 2', () => {
+    const { block } = getBlockFor(md, 5);
+    expect(block).toEqual(`  - this is block 3.1
+    - this is block 3.1.1`);
+  });
+
+  it('returns the line if no block is detected', () => {
+    const { block } = getBlockFor(md, 9);
+    expect(block).toEqual(`this is a simple line`);
+  });
+
+  it('is compatible with Range object', () => {
+    const note = parser.parse(URI.file('/path/to/a'), md);
+    const { start } = note.links[0].range;
+    const { block } = getBlockFor(md, start);
+    expect(block).toEqual(`- this is [[block]] 2
+  - this is block 2.1`);
+  });
+});
+
+describe('block detection for sections', () => {
+  const markdown = `
+# Section 1
+- this is block 1
+- this is [[block]] 2
+  - this is block 2.1
+
+# Section 2
+this is a simple line
+this is another simple line
+
+## Section 2.1
+  - this is block 3.1
+    - this is block 3.1.1
+  - this is block 3.2
+
+# Section 3
+# Section 4
+some text
+some text
+`;
+
+  it('should return correct block for valid markdown string with line number', () => {
+    const { block, nLines } = getBlockFor(markdown, 1);
+    expect(block).toEqual(`# Section 1
+- this is block 1
+- this is [[block]] 2
+  - this is block 2.1
+`);
+    expect(nLines).toEqual(5);
+  });
+
+  it('should return correct block for valid markdown string with position', () => {
+    const { block, nLines } = getBlockFor(markdown, 6);
+    expect(block).toEqual(`# Section 2
+this is a simple line
+this is another simple line
+
+## Section 2.1
+  - this is block 3.1
+    - this is block 3.1.1
+  - this is block 3.2
+`);
+    expect(nLines).toEqual(9);
+  });
+
+  it('should return single line for section with no content', () => {
+    const { block, nLines } = getBlockFor(markdown, 15);
+    expect(block).toEqual('# Section 3');
+    expect(nLines).toEqual(1);
+  });
+
+  it('should return till end of file for last section', () => {
+    const { block, nLines } = getBlockFor(markdown, 16);
+    expect(block).toEqual(`# Section 4
+some text
+some text`);
+    expect(nLines).toEqual(3);
+  });
+
+  it('should return single line for non-existing line number', () => {
+    const { block, nLines } = getBlockFor(markdown, 100);
+    expect(block).toEqual('');
+    expect(nLines).toEqual(1);
+  });
+
+  it('should return single line for non-existing position', () => {
+    const { block, nLines } = getBlockFor(markdown, Position.create(100, 2));
+    expect(block).toEqual('');
+    expect(nLines).toEqual(1);
   });
 });
